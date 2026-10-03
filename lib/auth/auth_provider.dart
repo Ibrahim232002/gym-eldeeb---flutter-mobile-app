@@ -92,7 +92,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _repository.signIn(email: email, password: password);
       await refreshUserSession();
-      return true;
+      return state.isAuthenticated;
     } catch (e) {
       state = AuthState.unauthenticated(_cleanError(e));
       return false;
@@ -111,7 +111,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fullName: fullName,
       );
       await refreshUserSession();
-      return true;
+      return state.isAuthenticated;
     } catch (e) {
       state = AuthState.unauthenticated(_cleanError(e));
       return false;
