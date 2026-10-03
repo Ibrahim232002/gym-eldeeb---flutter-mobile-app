@@ -94,6 +94,7 @@ class DataSyncService extends ChangeNotifier {
 
   SyncStatus _syncStatus = SyncStatus.synced;
   String? _syncErrorMessage;
+  bool _syncInProgress = false;
 
   List<Member> _members = [];
   List<MembershipPlan> _plans = [];
@@ -128,33 +129,28 @@ class DataSyncService extends ChangeNotifier {
       return _gymId!;
     }
 
-    // 1. Check SharedPreferences cached profile
+    // Resolve identity before consulting any persisted profile data. Never trust
+    // a cached gym association when it cannot be tied to the active account.
+    final currentUser = _supabase.auth.currentUser;
+    final expectedUserId = currentUser?.id ?? _userId;
+    if (expectedUserId == null || expectedUserId.isEmpty) {
+      throw Exception('المستخدم غير مسجل');
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final cachedProfileStr = prefs.getString('cached_user_profile');
     if (cachedProfileStr != null) {
       try {
-        final map = jsonDecode(cachedProfileStr);
-        if (map['gym_id'] != null && (map['gym_id'] as String).isNotEmpty) {
+        final map = jsonDecode(cachedProfileStr) as Map<String, dynamic>;
+        if (map['id'] == expectedUserId && map['gym_id'] is String && (map['gym_id'] as String).isNotEmpty) {
           _gymId = map['gym_id'] as String;
           return _gymId!;
         }
       } catch (_) {}
     }
 
-    // 2. Check SharedPreferences cached gym
-    final cachedGymStr = prefs.getString('cached_user_gym');
-    if (cachedGymStr != null) {
-      try {
-        final map = jsonDecode(cachedGymStr);
-        if (map['id'] != null && (map['id'] as String).isNotEmpty) {
-          _gymId = map['id'] as String;
-          return _gymId!;
-        }
-      } catch (_) {}
-    }
-
-    // 3. Fallback: Query Supabase profiles table directly
-    final currentUser = _supabase.auth.currentUser;
+    // Query the authenticated user's profile; cached gym data has no reliable
+    // ownership marker and is deliberately not used as an identity fallback.
     if (currentUser != null) {
       try {
         final res = await _supabase.from('profiles').select('gym_id').eq('id', currentUser.id).maybeSingle();
@@ -271,6 +267,9 @@ class DataSyncService extends ChangeNotifier {
 
   // --- Global Synchronization ---
   Future<void> syncAll() async {
+    if (_syncInProgress) return;
+    _syncInProgress = true;
+    try {
     final online = await _networkInfo.isConnected;
     if (!online) {
       _syncStatus = SyncStatus.offline;
@@ -317,7 +316,12 @@ class DataSyncService extends ChangeNotifier {
       _syncStatus = SyncStatus.error;
       _syncErrorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
+      _syncInProgress = false;
       notifyListeners();
+    }
+    } catch (e) {
+      _syncInProgress = false;
+      rethrow;
     }
   }
 
@@ -337,10 +341,14 @@ class DataSyncService extends ChangeNotifier {
     } else if (action.action == 'update') {
       await _supabase.from(table).update(action.payload).eq('id', action.payload['id'] as Object);
     } else if (action.action == 'delete') {
-      await _supabase.from(table).update({
-        'deleted_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', action.payload['id'] as Object);
+      if (action.table == 'payments') {
+        await _supabase.from(table).delete().eq('id', action.payload['id'] as Object);
+      } else {
+        await _supabase.from(table).update({
+          'deleted_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', action.payload['id'] as Object);
+      }
     } else {
       throw StateError('Unsupported pending sync action: ${action.action}');
     }
