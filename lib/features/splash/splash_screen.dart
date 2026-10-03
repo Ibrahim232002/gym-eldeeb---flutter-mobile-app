@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/auth_provider.dart';
 import '../../auth/auth_state.dart';
+import '../../core/theme/app_colors.dart';
+import '../../widgets/brand_logo.dart';
 
 /// Splash Screen initializing session and redirecting user
 class SplashScreen extends ConsumerStatefulWidget {
@@ -16,9 +18,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _navigate(ref.read(authNotifierProvider));
-    });
+    _checkInitialState();
+  }
+
+  void _checkInitialState() async {
+    // Artificial small delay for smooth branding experience
+    await Future.delayed(const Duration(milliseconds: 1200));
+
+    if (!mounted) return;
+
+    final authState = ref.read(authNotifierProvider);
+    _navigate(authState);
   }
 
   void _navigate(AuthState state) {
@@ -50,8 +60,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       }
     });
 
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const BrandLogo(size: 96),
+            const SizedBox(height: 48),
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'جارٍ التحميل ومزامنة البيانات...',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
