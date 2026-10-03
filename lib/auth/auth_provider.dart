@@ -131,7 +131,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         inviteCode: inviteCode,
       );
       await refreshUserSession();
-      return true;
+      return state.isAuthenticated;
     } catch (e) {
       final errorMsg = _cleanError(e);
       state = AuthState.error(errorMsg);
