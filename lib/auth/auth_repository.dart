@@ -140,8 +140,9 @@ class AuthRepository {
       }
     }
 
-    // Fallback to locally cached profile
-    return await _localStorage.getProfile();
+    // Never reuse a cached profile belonging to a different signed-in account.
+    final cachedProfile = await _localStorage.getProfile();
+    return cachedProfile?.id == user.id ? cachedProfile : null;
   }
 
   /// Internal helper to fetch profile from Supabase
@@ -181,7 +182,8 @@ class AuthRepository {
       }
     }
 
-    return await _localStorage.getGym();
+    final cachedGym = await _localStorage.getGym();
+    return cachedGym?.id == gymId ? cachedGym : null;
   }
 
   /// Join a gym using invite code via the secure 'join-gym' Edge Function
