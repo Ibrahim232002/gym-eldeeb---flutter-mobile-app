@@ -120,6 +120,8 @@ class DataSyncService extends ChangeNotifier {
   List<MembershipPlan> get plans => _plans.where((p) => p.deletedAt == null).toList();
   List<Membership> get memberships => _memberships.where((m) => m.deletedAt == null).toList();
   List<Payment> get payments => _payments;
+  final Map<String, String> _creatorNames = {};
+  String creatorName(String? userId) => userId == null ? 'غير معروف' : (_creatorNames[userId] ?? 'عضو من فريق الجيم');
 
   bool get isOffline => _syncStatus == SyncStatus.offline;
 
@@ -395,6 +397,25 @@ class DataSyncService extends ChangeNotifier {
         .order('paid_at', ascending: false);
     _payments = (paymentsResponse as List).map((json) => Payment.fromJson(json as Map<String, dynamic>)).toList();
     await prefs.setString(_keyPayments, jsonEncode(_payments.map((p) => p.toJson()).toList()));
+
+    // Resolve actor names for the audit labels shown in the app.
+    final actorIds = <String>{
+      ..._members.map((item) => item.createdBy).whereType<String>(),
+      ..._memberships.map((item) => item.createdBy).whereType<String>(),
+      ..._payments.map((item) => item.recordedBy).whereType<String>(),
+    }.toList();
+    if (actorIds.isNotEmpty) {
+      try {
+        final profiles = await _supabase.from('profiles').select('id, full_name').inFilter('id', actorIds);
+        for (final row in profiles as List) {
+          final id = row['id'] as String?;
+          final name = row['full_name'] as String?;
+          if (id != null && name != null && name.trim().isNotEmpty) _creatorNames[id] = name.trim();
+        }
+      } catch (_) {
+        // Keep the UI usable if profile-name lookup is unavailable.
+      }
+    }
   }
 
   // ==========================================
