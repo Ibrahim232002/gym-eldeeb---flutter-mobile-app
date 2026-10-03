@@ -146,8 +146,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Real Sign Out
   Future<void> signOut() async {
     state = AuthState.loading();
-    await _repository.signOut();
-    state = AuthState.unauthenticated();
+    try {
+      await _repository.signOut();
+    } finally {
+      // Do not leave protected routes in a loading state if local cleanup fails.
+      state = AuthState.unauthenticated();
+    }
   }
 
   String _cleanError(dynamic e) {
