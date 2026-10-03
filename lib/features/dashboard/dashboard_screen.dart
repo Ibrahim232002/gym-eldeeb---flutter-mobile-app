@@ -128,7 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(AppColors.primary)),
                   )
                 : const Icon(Icons.sync_rounded),
-            tooltip: 'مزامنة البيانات سحابياً',
+            tooltip: 'تحديث البيانات',
             onPressed: syncService.syncStatus == SyncStatus.syncing ? null : () => syncService.syncAll(),
           ),
         ],
@@ -181,7 +181,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case 0:
         return 'لوحة إحصائيات جيم الديب';
       case 1:
-        return 'كادر الأعضاء المشتركين';
+        return 'الأعضاء';
       case 2:
         return 'خطط وباقات الاشتراكات';
       case 3:
@@ -189,7 +189,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case 4:
         return 'سجل المدفوعات والإيرادات';
       case 5:
-        return 'مركز استيراد الكشوفات CSV';
+        return 'استيراد بيانات الأعضاء';
       case 6:
         return 'الإعدادات والملف الشخصي';
       default:
@@ -356,7 +356,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'خطأ مزامنة: ${data.syncErrorMessage}',
+                      'فيه بيانات لسه متسجلتش على الحساب. هنحاول تاني لما الاتصال يستقر.',
                       style: const TextStyle(color: AppColors.error, fontSize: 13),
                     ),
                   ),
@@ -2848,13 +2848,13 @@ class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'مركز استيراد بيانات الأعضاء والكشوفات القديمة',
+            'استيراد بيانات الأعضاء',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           const Text(
-            'قم برفع كشف الأعضاء المكتوب بصيغة CSV ليقوم جيم الديب بتحليله آلياً وربطه بقواعد البيانات السحابية والمحلية مباشرة.',
+            'اختار ملف الأعضاء من جهازك، وراجع البيانات قبل إضافتها.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
@@ -2877,7 +2877,7 @@ class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
                       icon: const Icon(Icons.file_upload_rounded),
                       label: _isLoading
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Color(0xFF0F141C))))
-                          : const Text('اختيار ملف CSV من الهاتف'),
+                          : const Text('اختيار ملف الأعضاء'),
                     ),
                   ],
                 ),
@@ -2918,7 +2918,7 @@ class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _triggerImport,
-                    child: _isLoading ? const CircularProgressIndicator() : const Text('بدء المزامنة والاستيراد'),
+                    child: _isLoading ? const CircularProgressIndicator() : const Text('استيراد الأعضاء'),
                   ),
                 ),
               ],
@@ -3043,7 +3043,7 @@ class _SettingsTab extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('حالة المزامنة والربط السحابي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('حالة تحديث البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               TextButton.icon(
                 onPressed: () async {
                   await ref.read(dataSyncServiceProvider.notifier).syncAll();
@@ -3067,7 +3067,7 @@ class _SettingsTab extends ConsumerWidget {
                 children: [
                   _buildSettingRow('الاتصال بالإنترنت', syncService.isOffline ? 'غير متصل (Offline)' : 'متصل بالشبكة (Online)'),
                   const Divider(),
-                  _buildSettingRow('حالة مزامنة الجداول', syncService.syncStatus == SyncStatus.synced ? 'مكتملة ومؤمنة (Synced)' : 'معلقة / جاري المزامنة'),
+                  _buildSettingRow('حالة تحديث البيانات', syncService.syncStatus == SyncStatus.synced ? 'مكتملة ومؤمنة (Synced)' : 'في انتظار التحديث / جاري التحديث'),
                 ],
               ),
             ),
