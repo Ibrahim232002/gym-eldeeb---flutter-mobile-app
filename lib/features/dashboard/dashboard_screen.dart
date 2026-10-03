@@ -432,10 +432,10 @@ class _DashboardOverviewTab extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
+                      ElevatedButton.icon(
                           onPressed: () {
                             showDialog(
                               context: context,
@@ -446,10 +446,8 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           icon: const Icon(Icons.person_add_rounded, size: 16),
                           label: const Text('إضافة عضو', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
                           onPressed: () {
                             showDialog(
                               context: context,
@@ -460,14 +458,13 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           icon: const Icon(Icons.card_membership_rounded, size: 16),
                           label: const Text('اشتراك جديد', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
+                      OutlinedButton.icon(
                           onPressed: () {
                             showDialog(
                               context: context,
@@ -478,10 +475,8 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           icon: const Icon(Icons.payment_rounded, size: 16),
                           label: const Text('تسجيل دفعة', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
                           onPressed: () {
                             ref.read(selectedTabProvider.notifier).state = 5;
                           },
@@ -743,12 +738,12 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildFilterChip('all', 'الكل (${data.members.length})'),
-                  const SizedBox(width: 8),
                   _buildFilterChip('active', 'نشط (${data.members.where((m) => m.isActive).length})'),
-                  const SizedBox(width: 8),
                   _buildFilterChip('inactive', 'غير نشط (${data.members.where((m) => !m.isActive).length})'),
                 ],
               ),
