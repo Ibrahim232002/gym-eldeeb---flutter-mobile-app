@@ -1,0 +1,7 @@
+{
+  "name": "Gym ElDeeb - Flutter Mobile App",
+  "description": "Production-oriented Arabic-first Flutter mobile application for Gym ElDeeb with Supabase backend and offline-first architecture.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
