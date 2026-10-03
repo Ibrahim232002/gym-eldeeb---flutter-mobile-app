@@ -173,7 +173,7 @@ class CsvImportService {
     final seenPhones = <String>{};
     for (var i = 0; i < parsedRows.length; i++) {
       final row = parsedRows[i];
-      final phone = row.phone?.replaceAll(RegExp(r'\D'), '');
+      final phone = _normalizePhoneForDuplicate(row.phone);
       if (row.status == 'valid' && phone != null && phone.isNotEmpty) {
         if (!seenPhones.add(phone)) {
           parsedRows[i] = ParsedImportRow(
