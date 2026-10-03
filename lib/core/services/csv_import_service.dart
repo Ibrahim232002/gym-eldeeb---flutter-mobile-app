@@ -63,11 +63,11 @@ class CsvImportService {
       throw Exception('عذراً، فشل قراءة الملف المحدد.');
     }
 
-    return parseCsvText(utf8.decode(fileBytes));
+    return CsvImportService.parseCsvText(utf8.decode(fileBytes));
   }
 
   /// Parse CSV text independently from file picking so it can be validated in unit tests.
-  List<ParsedImportRow> parseCsvText(String csvText) {
+  static List<ParsedImportRow> parseCsvText(String csvText) {
     final csvString = csvText.replaceFirst('\uFEFF', '');
     final rows = const CsvToListConverter().convert(csvString);
 
@@ -193,7 +193,7 @@ class CsvImportService {
     return parsedRows;
   }
 
-  DateTime? _parseImportDate(String value) {
+  static DateTime? _parseImportDate(String value) {
     final normalized = value.trim();
     if (normalized.isEmpty) return null;
     final direct = DateTime.tryParse(normalized);
@@ -207,7 +207,7 @@ class CsvImportService {
     return null;
   }
 
-  double? _parseImportAmount(String value) {
+  static double? _parseImportAmount(String value) {
     final normalized = value.trim().replaceAll(' ', '');
     if (normalized.isEmpty) return null;
     final direct = double.tryParse(normalized);
