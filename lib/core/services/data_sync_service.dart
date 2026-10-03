@@ -376,7 +376,7 @@ class DataSyncService extends ChangeNotifier {
         _syncStatus = SyncStatus.error;
         if (blockedCount > 0) {
           _syncErrorMessage =
-              'هناك $blockedCount عملية معلقة بسبب خطأ دائم. راجع الصلاحيات أو البيانات ثم استخدم المزامنة اليدوية لإعادة المحاولة.';
+              'هناك $blockedCount عملية معلقة لم تُنفذ: قد تكون لحساب آخر، أو تحتاج إعادة محاولة يدوية، أو بياناتها القديمة بلا مالك محدد. لم يتم حذفها.';
         } else {
           _syncErrorMessage =
               'تعذر مزامنة $failedCount عملية. ستتم إعادة المحاولة تلقائياً للأخطاء المؤقتة.';
