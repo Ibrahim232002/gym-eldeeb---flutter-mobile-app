@@ -125,6 +125,9 @@ class DataSyncService extends ChangeNotifier {
 
   bool get isOffline => _syncStatus == SyncStatus.offline;
 
+  // Prefer the live authenticated identity over the provider's cached profile.
+  String? get _actorUserId => _supabase.auth.currentUser?.id ?? _userId;
+
   // --- Resolve Gym ID ---
   Future<String> requireGymId() async {
     if (_gymId != null && _gymId!.trim().isNotEmpty) {
@@ -440,7 +443,7 @@ class DataSyncService extends ChangeNotifier {
       notes: notes?.trim(),
       joinDate: joinDate,
       isActive: true,
-      createdBy: _userId ?? _supabase.auth.currentUser?.id,
+      createdBy: _actorUserId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       syncVersion: 1,
@@ -627,7 +630,7 @@ class DataSyncService extends ChangeNotifier {
       endDate: endDate,
       price: price,
       status: 'active',
-      createdBy: _userId ?? _supabase.auth.currentUser?.id,
+      createdBy: _actorUserId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -671,7 +674,7 @@ class DataSyncService extends ChangeNotifier {
       amount: amount,
       paymentMethod: paymentMethod,
       paidAt: paidAt,
-      recordedBy: _userId ?? _supabase.auth.currentUser?.id,
+      recordedBy: _actorUserId,
       notes: notes?.trim(),
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
