@@ -1,10 +1,3 @@
-plugins {
-    id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-    id("dev.flutter.flutter-gradle-plugin")
-}
-
-
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -14,6 +7,14 @@ val keystoreProperties = Properties().apply {
         load(FileInputStream(keystorePropertiesFile))
     }
 }
+
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+
 android {
     namespace = "com.gymeldeeb.app.gym_eldeeb"
     compileSdk = flutter.compileSdkVersion
