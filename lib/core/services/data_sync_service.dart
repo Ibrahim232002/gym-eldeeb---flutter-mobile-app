@@ -175,13 +175,16 @@ class DataSyncService extends ChangeNotifier {
   Future<void> _loadAllFromLocalCache() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // If _gymId is null, attempt to resolve from cached profile
+    // Only use a cached association when its profile belongs to the active user.
     if (_gymId == null) {
+      final activeUserId = _supabase.auth.currentUser?.id ?? _userId;
       final cachedProfileStr = prefs.getString('cached_user_profile');
-      if (cachedProfileStr != null) {
+      if (activeUserId != null && cachedProfileStr != null) {
         try {
-          final map = jsonDecode(cachedProfileStr);
-          if (map['gym_id'] != null) _gymId = map['gym_id'] as String;
+          final map = jsonDecode(cachedProfileStr) as Map<String, dynamic>;
+          if (map['id'] == activeUserId && map['gym_id'] is String && (map['gym_id'] as String).isNotEmpty) {
+            _gymId = map['gym_id'] as String;
+          }
         } catch (_) {}
       }
     }
