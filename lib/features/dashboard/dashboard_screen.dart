@@ -794,6 +794,7 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                           child: Text(member.fullName[0], style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                         title: Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [if (member.phone?.isNotEmpty == true) Text(member.phone!), Text('أضافه: ${data.creatorName(member.createdBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted))]),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1946,6 +1947,7 @@ class _MembershipsTab extends ConsumerWidget {
                           children: [
                             Text('الباقة: ${plan.name} • القيمة: ${RtlSupport.formatEgp(membership.price)}', style: const TextStyle(fontSize: 12)),
                             Text('من: ${RtlSupport.formatDate(membership.startDate)} إلى ${RtlSupport.formatDate(membership.endDate)}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                            Text('سجّل الاشتراك: ${data.creatorName(membership.createdBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                           ],
                         ),
                         trailing: Row(
@@ -2385,6 +2387,8 @@ class _PaymentsTab extends ConsumerWidget {
                                   payment.notes ?? 'إيصال دفع',
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                 ),
+                                const SizedBox(height: 3),
+                                Text('سجّل الدفعة: ${data.creatorName(payment.recordedBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                                 const SizedBox(height: 4),
                                 Text(
                                   RtlSupport.formatEgp(payment.amount),
