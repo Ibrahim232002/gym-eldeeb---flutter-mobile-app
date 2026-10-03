@@ -3393,13 +3393,25 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
       final price = double.tryParse(_priceCtrl.text) ?? plan?.price ?? 0.0;
       final endDate = _startDate.add(Duration(days: durationDays));
 
-      await ref.read(dataSyncServiceProvider.notifier).createMembership(
+      final membership = await ref.read(dataSyncServiceProvider.notifier).createMembership(
             memberId: _selectedMemberId!,
             planId: _selectedPlanId,
             startDate: _startDate,
             endDate: endDate,
             price: price,
           );
+
+      // The form labels this value as the amount paid, so keep the cash ledger
+      // consistent with the membership created from the same submission.
+      if (price > 0) {
+        await ref.read(dataSyncServiceProvider.notifier).recordPayment(
+              membershipId: membership.id,
+              amount: price,
+              paymentMethod: 'cash',
+              paidAt: DateTime.now(),
+              notes: 'دفعة تفعيل اشتراك',
+            );
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();
