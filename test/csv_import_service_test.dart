@@ -4,7 +4,7 @@ import 'package:gym_eldeeb/core/services/csv_import_service.dart';
 void main() {
   group('CSV import validation', () {
     test('parses valid Arabic/English headers and common dates', () {
-      final rows = CsvImportService.parseCsvText('اسم,موبايل,تاريخ الانضمام,مبلغ\nAhmed Ali,01012345678,03/10/2026,1,500');
+      final rows = CsvImportService.parseCsvText('اسم,موبايل,تاريخ الانضمام,مبلغ\nAhmed Ali,01012345678,03/10/2026,"1,500"');
       expect(rows, hasLength(1));
       expect(rows.first.status, 'valid');
       expect(rows.first.fullName, 'Ahmed Ali');
