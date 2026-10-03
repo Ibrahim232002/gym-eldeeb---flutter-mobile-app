@@ -24,6 +24,8 @@ class PendingAction {
   final String action; // 'create', 'update', 'delete'
   final Map<String, dynamic> payload;
   final DateTime createdAt;
+  final int retryCount;
+  final String? lastError;
 
   PendingAction({
     required this.id,
@@ -31,6 +33,8 @@ class PendingAction {
     required this.action,
     required this.payload,
     required this.createdAt,
+    this.retryCount = 0,
+    this.lastError,
   });
 
   Map<String, dynamic> toJson() {
@@ -40,6 +44,8 @@ class PendingAction {
       'action': action,
       'payload': payload,
       'createdAt': createdAt.toIso8601String(),
+      'retryCount': retryCount,
+      'lastError': lastError,
     };
   }
 
@@ -50,6 +56,8 @@ class PendingAction {
       action: json['action'] as String,
       payload: json['payload'] as Map<String, dynamic>,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      retryCount: json['retryCount'] as int? ?? 0,
+      lastError: json['lastError'] as String?,
     );
   }
 }
@@ -124,6 +132,23 @@ class DataSyncService extends ChangeNotifier {
   String creatorName(String? userId) => userId == null ? 'غير معروف' : (_creatorNames[userId] ?? 'عضو من فريق الجيم');
 
   bool get isOffline => _syncStatus == SyncStatus.offline;
+  static const int _maxAutomaticRetries = 5;
+
+  bool _isPermanentSyncError(Object error) {
+    if (error is PostgrestException) {
+      const permanentCodes = {
+        '42501', // insufficient_privilege / RLS
+        '42703', // undefined_column
+        '42P01', // undefined_table
+        '23502', // not_null_violation
+        '23503', // foreign_key_violation
+        '23514', // check_violation
+        '23522', // numeric_value_out_of_range
+      };
+      return permanentCodes.contains(error.code);
+    }
+    return false;
+  }
 
   // Prefer the live authenticated identity over the provider's cached profile.
   String? get _actorUserId => _supabase.auth.currentUser?.id ?? _userId;
@@ -274,51 +299,71 @@ class DataSyncService extends ChangeNotifier {
   }
 
   // --- Global Synchronization ---
-  Future<void> syncAll() async {
+  Future<void> syncAll({bool forceRetry = false}) async {
     if (_syncInProgress) return;
     _syncInProgress = true;
-    try {
-    final online = await _networkInfo.isConnected;
-    if (!online) {
-      _syncStatus = SyncStatus.offline;
-      notifyListeners();
-      return;
-    }
 
     try {
+      final online = await _networkInfo.isConnected;
+      if (!online) {
+        _syncStatus = SyncStatus.offline;
+        notifyListeners();
+        return;
+      }
+
       final gymId = await requireGymId();
       _syncStatus = SyncStatus.syncing;
       _syncErrorMessage = null;
       notifyListeners();
 
-      // 1. Process pending offline queue
       final queue = await _getPendingQueue();
-      var queueFailures = 0;
-      if (queue.isNotEmpty) {
-        final remaining = <PendingAction>[];
-        for (final item in queue) {
-          try {
-            await _executePendingActionOnRemote(item);
-          } catch (_) {
-            remaining.add(item);
-            queueFailures++;
-          }
+      final remaining = <PendingAction>[];
+      var failedCount = 0;
+      var blockedCount = 0;
+
+      for (final item in queue) {
+        if (!forceRetry && item.retryCount >= _maxAutomaticRetries) {
+          remaining.add(item);
+          blockedCount++;
+          continue;
         }
-        await _savePendingQueue(remaining);
+
+        try {
+          await _executePendingActionOnRemote(item);
+        } catch (e) {
+          final permanent = _isPermanentSyncError(e);
+          final retryCount = permanent
+              ? _maxAutomaticRetries
+              : item.retryCount + 1;
+          remaining.add(PendingAction(
+            id: item.id,
+            table: item.table,
+            action: item.action,
+            payload: item.payload,
+            createdAt: item.createdAt,
+            retryCount: retryCount,
+            lastError: e.toString(),
+          ));
+          failedCount++;
+        }
       }
 
-      // 2. Refresh the cache only after every queued write has succeeded.
-      // A failed write may represent an optimistic local record; replacing the
-      // cache with remote data here would make that pending record disappear.
-      if (queueFailures == 0) {
+      await _savePendingQueue(remaining);
+
+      // Do not replace optimistic local records while a queued write is still
+      // failing. Once the queue is clear, refresh from the authoritative source.
+      if (failedCount == 0 && blockedCount == 0) {
         await _fetchRemoteData(gymId);
-      }
-
-      if (queueFailures > 0) {
-        _syncStatus = SyncStatus.error;
-        _syncErrorMessage = 'تعذر مزامنة $queueFailures عملية معلقة. ستتم المحاولة مرة أخرى.';
-      } else {
         _syncStatus = SyncStatus.synced;
+      } else {
+        _syncStatus = SyncStatus.error;
+        if (blockedCount > 0) {
+          _syncErrorMessage =
+              'هناك $blockedCount عملية معلقة بسبب خطأ دائم. راجع الصلاحيات أو البيانات ثم استخدم المزامنة اليدوية لإعادة المحاولة.';
+        } else {
+          _syncErrorMessage =
+              'تعذر مزامنة $failedCount عملية. ستتم إعادة المحاولة تلقائياً للأخطاء المؤقتة.';
+        }
       }
     } catch (e) {
       _syncStatus = SyncStatus.error;
@@ -326,10 +371,6 @@ class DataSyncService extends ChangeNotifier {
     } finally {
       _syncInProgress = false;
       notifyListeners();
-    }
-    } catch (e) {
-      _syncInProgress = false;
-      rethrow;
     }
   }
 
@@ -461,7 +502,7 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMembers).insert(newMember.toJson());
+        await _supabase.from(SupabaseConstants.tableMembers).upsert(newMember.toJson());
       } catch (e) {
         await _addToQueue('members', 'create', newMember.toJson());
       }
@@ -550,7 +591,7 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMembershipPlans).insert(newPlan.toJson());
+        await _supabase.from(SupabaseConstants.tableMembershipPlans).upsert(newPlan.toJson());
       } catch (_) {
         await _addToQueue('plans', 'create', newPlan.toJson());
       }
@@ -644,7 +685,7 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMemberships).insert(newMembership.toJson());
+        await _supabase.from(SupabaseConstants.tableMemberships).upsert(newMembership.toJson());
       } catch (_) {
         await _addToQueue('memberships', 'create', newMembership.toJson());
       }
@@ -689,7 +730,7 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tablePayments).insert(newPayment.toJson());
+        await _supabase.from(SupabaseConstants.tablePayments).upsert(newPayment.toJson());
       } catch (_) {
         await _addToQueue('payments', 'create', newPayment.toJson());
       }
