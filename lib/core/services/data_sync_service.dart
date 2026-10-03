@@ -327,6 +327,13 @@ class DataSyncService extends ChangeNotifier {
       var blockedCount = 0;
 
       for (final item in queue) {
+        final activeUserId = _supabase.auth.currentUser?.id;
+        if (activeUserId == null || activeUserId != item.ownerUserId) {
+          // Keep the operation intact; never replay one account's queue as another.
+          remaining.add(item);
+          blockedCount++;
+          continue;
+        }
         if (!forceRetry && item.retryCount >= _maxAutomaticRetries) {
           remaining.add(item);
           blockedCount++;
@@ -343,6 +350,7 @@ class DataSyncService extends ChangeNotifier {
           remaining.add(PendingAction(
             id: item.id,
             table: item.table,
+            ownerUserId: item.ownerUserId,
             action: item.action,
             payload: item.payload,
             createdAt: item.createdAt,
