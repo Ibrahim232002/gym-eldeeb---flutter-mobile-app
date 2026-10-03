@@ -147,10 +147,10 @@ class CsvImportService {
       if (fullName == null || fullName.isEmpty) {
         status = 'invalid';
         errorMsg = 'الاسم الكامل مطلوب';
-      } else if (joinDateIdx != -1 && row[joinDateIdx]?.toString().trim().isNotEmpty && joinDate == null) {
+      } else if (joinDateIdx != -1 && joinDateIdx < row.length && row[joinDateIdx] != null && row[joinDateIdx].toString().trim().isNotEmpty && joinDate == null) {
         status = 'invalid';
         errorMsg = 'تاريخ الانضمام غير صالح. استخدم YYYY-MM-DD أو DD/MM/YYYY';
-      } else if (paymentAmountIdx != -1 && row[paymentAmountIdx]?.toString().trim().isNotEmpty && paymentAmount == null) {
+      } else if (paymentAmountIdx != -1 && paymentAmountIdx < row.length && row[paymentAmountIdx] != null && row[paymentAmountIdx].toString().trim().isNotEmpty && paymentAmount == null) {
         status = 'invalid';
         errorMsg = 'قيمة الدفعة غير صالحة';
       } else if (paymentAmount != null && paymentAmount < 0) {
