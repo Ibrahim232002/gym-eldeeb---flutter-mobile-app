@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -62,7 +63,7 @@ class CsvImportService {
       throw Exception('عذراً، فشل قراءة الملف المحدد.');
     }
 
-    final csvString = utf8.decode(fileBytes);
+    final csvString = utf8.decode(fileBytes).replaceFirst('\uFEFF', '');
     final rows = const CsvToListConverter().convert(csvString);
 
     if (rows.isEmpty) {
@@ -122,7 +123,7 @@ class CsvImportService {
       if (joinDateIdx != -1 && joinDateIdx < row.length) {
         final dateStr = row[joinDateIdx]?.toString().trim();
         if (dateStr != null) {
-          joinDate = DateTime.tryParse(dateStr);
+          joinDate = _parseImportDate(dateStr);
         }
       }
 
@@ -130,17 +131,26 @@ class CsvImportService {
       if (paymentAmountIdx != -1 && paymentAmountIdx < row.length) {
         final amtStr = row[paymentAmountIdx]?.toString().trim();
         if (amtStr != null) {
-          paymentAmount = double.tryParse(amtStr);
+          paymentAmount = _parseImportAmount(amtStr);
         }
       }
 
-      // Basic validations
+      // Validate fields before import so malformed rows never become partial records.
       String status = 'valid';
       String? errorMsg;
 
       if (fullName == null || fullName.isEmpty) {
         status = 'invalid';
         errorMsg = 'الاسم الكامل مطلوب';
+      } else if (joinDateIdx != -1 && row[joinDateIdx]?.toString().trim().isNotEmpty && joinDate == null) {
+        status = 'invalid';
+        errorMsg = 'تاريخ الانضمام غير صالح. استخدم YYYY-MM-DD أو DD/MM/YYYY';
+      } else if (paymentAmountIdx != -1 && row[paymentAmountIdx]?.toString().trim().isNotEmpty && paymentAmount == null) {
+        status = 'invalid';
+        errorMsg = 'قيمة الدفعة غير صالحة';
+      } else if (paymentAmount != null && paymentAmount < 0) {
+        status = 'invalid';
+        errorMsg = 'قيمة الدفعة لا يمكن أن تكون سالبة';
       }
 
       parsedRows.add(ParsedImportRow(
@@ -155,7 +165,52 @@ class CsvImportService {
       ));
     }
 
+    final seenPhones = <String>{};
+    for (var i = 0; i < parsedRows.length; i++) {
+      final row = parsedRows[i];
+      final phone = row.phone?.replaceAll(RegExp(r'\\D'), '');
+      if (row.status == 'valid' && phone != null && phone.isNotEmpty) {
+        if (!seenPhones.add(phone)) {
+          parsedRows[i] = ParsedImportRow(
+            rowNumber: row.rowNumber,
+            rawData: row.rawData,
+            fullName: row.fullName,
+            phone: row.phone,
+            joinDate: row.joinDate,
+            paymentAmount: row.paymentAmount,
+            status: 'invalid',
+            errorMessage: 'رقم الهاتف مكرر داخل ملف CSV',
+          );
+        }
+      }
+    }
+
     return parsedRows;
+  }
+
+  DateTime? _parseImportDate(String value) {
+    final normalized = value.trim();
+    if (normalized.isEmpty) return null;
+    final direct = DateTime.tryParse(normalized);
+    if (direct != null) return direct;
+
+    for (final pattern in ['dd/MM/yyyy', 'd/M/yyyy', 'yyyy/MM/dd']) {
+      try {
+        return DateFormat(pattern).parseStrict(normalized);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  double? _parseImportAmount(String value) {
+    final normalized = value.trim().replaceAll(' ', '');
+    if (normalized.isEmpty) return null;
+    final direct = double.tryParse(normalized);
+    if (direct != null) return direct;
+
+    // Accept common spreadsheet thousands separators, e.g. "1,500".
+    final thousands = normalized.replaceAll(',', '');
+    return double.tryParse(thousands);
   }
 
   /// Execute final import to Supabase and Local Cache
@@ -192,10 +247,8 @@ class CsvImportService {
       }
 
       try {
-        final memberId = const Uuid().v4();
-        
         // 1. Add Member
-        await _syncService.addMember(
+        final member = await _syncService.addMember(
           fullName: row.fullName!,
           phone: row.phone,
           notes: 'مستورد من ملف CSV',
@@ -228,7 +281,7 @@ class CsvImportService {
             'join_date': row.joinDate?.toIso8601String().substring(0, 10),
             'payment_amount': row.paymentAmount,
             'status': 'completed',
-            'member_id': memberId,
+            'member_id': member.id,
             'created_at': DateTime.now().toIso8601String(),
           });
         } catch (_) {}
