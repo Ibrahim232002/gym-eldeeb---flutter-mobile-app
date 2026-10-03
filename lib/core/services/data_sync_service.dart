@@ -300,9 +300,12 @@ class DataSyncService extends ChangeNotifier {
         await _savePendingQueue(remaining);
       }
 
-      // 2. Fetch fresh remote data and update local cache.
-      // Keep the status honest if any queued operation could not be applied.
-      await _fetchRemoteData(gymId);
+      // 2. Refresh the cache only after every queued write has succeeded.
+      // A failed write may represent an optimistic local record; replacing the
+      // cache with remote data here would make that pending record disappear.
+      if (queueFailures == 0) {
+        await _fetchRemoteData(gymId);
+      }
 
       if (queueFailures > 0) {
         _syncStatus = SyncStatus.error;
