@@ -794,7 +794,6 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                           child: Text(member.fullName[0], style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                         title: Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [if (member.phone?.isNotEmpty == true) Text(member.phone!), Text('أضافه: ${data.creatorName(member.createdBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted))]),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
