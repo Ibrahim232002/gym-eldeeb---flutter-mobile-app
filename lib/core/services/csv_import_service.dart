@@ -63,7 +63,12 @@ class CsvImportService {
       throw Exception('عذراً، فشل قراءة الملف المحدد.');
     }
 
-    final csvString = utf8.decode(fileBytes).replaceFirst('\uFEFF', '');
+    return parseCsvText(utf8.decode(fileBytes));
+  }
+
+  /// Parse CSV text independently from file picking so it can be validated in unit tests.
+  List<ParsedImportRow> parseCsvText(String csvText) {
+    final csvString = csvText.replaceFirst('\uFEFF', '');
     final rows = const CsvToListConverter().convert(csvString);
 
     if (rows.isEmpty) {
