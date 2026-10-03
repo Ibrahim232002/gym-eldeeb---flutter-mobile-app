@@ -2950,13 +2950,14 @@ class _SettingsTab extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('معلومات الصالة الرياضية (جيم الديب)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              TextButton.icon(
-                onPressed: () {
-                  showDialog(context: context, builder: (_) => _EditGymInfoDialog(gym: auth.gym));
-                },
-                icon: const Icon(Icons.edit_rounded, size: 16),
-                label: const Text('تعديل بيانات الجيم'),
-              ),
+              if (auth.profile?.isOwner == true)
+                TextButton.icon(
+                  onPressed: () {
+                    showDialog(context: context, builder: (_) => _EditGymInfoDialog(gym: auth.gym));
+                  },
+                  icon: const Icon(Icons.edit_rounded, size: 16),
+                  label: const Text('تعديل بيانات الجيم'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -3046,12 +3047,22 @@ class _SettingsTab extends ConsumerWidget {
               const Text('حالة تحديث البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               TextButton.icon(
                 onPressed: () async {
-                  await ref.read(dataSyncServiceProvider.notifier).syncAll();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تمت مزامنة الجداول بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
-                    );
-                  }
+                  final sync = ref.read(dataSyncServiceProvider.notifier);
+                  await sync.syncAll(forceRetry: true);
+                  if (!context.mounted) return;
+
+                  final state = ref.read(dataSyncServiceProvider);
+                  final message = state.syncStatus == SyncStatus.synced
+                      ? 'تمت مزامنة البيانات بنجاح.'
+                      : (state.syncErrorMessage ?? 'تعذرت المزامنة، راجع البيانات أو الصلاحيات.');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(message, textDirection: ui.TextDirection.rtl),
+                      backgroundColor: state.syncStatus == SyncStatus.synced
+                          ? AppColors.success
+                          : AppColors.error,
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('مزامنة فورية'),
