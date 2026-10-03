@@ -3392,6 +3392,7 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
 
     setState(() => _isSaving = true);
 
+    var membershipCreated = false;
     try {
       final data = ref.read(dataSyncServiceProvider);
       final plan = data.plans.where((p) => p.id == _selectedPlanId).firstOrNull;
@@ -3406,6 +3407,7 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
             endDate: endDate,
             price: price,
           );
+      membershipCreated = true;
 
       // The form labels this value as the amount paid, so keep the cash ledger
       // consistent with the membership created from the same submission.
@@ -3427,10 +3429,21 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل تسجيل الاشتراك: $e', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
-      );
+      if (membershipCreated) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم إنشاء الاشتراك، لكن تعذّر تسجيل الدفعة. راجع سجل المدفوعات قبل إعادة التسجيل. ($e)', textDirection: ui.TextDirection.rtl),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 7),
+          ),
+        );
+      } else {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل تسجيل الاشتراك: $e', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 
