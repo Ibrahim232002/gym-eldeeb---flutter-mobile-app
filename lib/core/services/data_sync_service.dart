@@ -325,7 +325,9 @@ class DataSyncService extends ChangeNotifier {
     else if (action.table == 'memberships') table = SupabaseConstants.tableMemberships;
     else if (action.table == 'payments') table = SupabaseConstants.tablePayments;
 
-    if (table.isEmpty) return;
+    if (table.isEmpty) {
+      throw StateError('Unsupported pending sync table: ${action.table}');
+    }
 
     if (action.action == 'create') {
       await _supabase.from(table).upsert(action.payload);
@@ -336,6 +338,8 @@ class DataSyncService extends ChangeNotifier {
         'deleted_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', action.payload['id'] as Object);
+    } else {
+      throw StateError('Unsupported pending sync action: ${action.action}');
     }
   }
 
