@@ -276,6 +276,8 @@ class CsvImportService {
 
     var importedCount = 0;
     var failedCount = 0;
+    var auditFailureCount = 0;
+    var partialFailureCount = 0;
 
     for (final row in rowsToImport) {
       if (row.status == 'invalid') {
@@ -300,7 +302,7 @@ class CsvImportService {
               'error_message': 'عضو بنفس رقم الهاتف موجود بالفعل في الجيم',
               'created_at': DateTime.now().toIso8601String(),
             });
-          } catch (_) {}
+          } catch (_) { auditFailureCount++; }
           continue;
         }
 
@@ -314,18 +316,26 @@ class CsvImportService {
 
         if (phoneKey != null) existingPhoneKeys.add(phoneKey);
 
-        // 2. Add Payment if paymentAmount is defined
+        // The member is already persisted (or queued) at this point. Track any
+        // later payment failure as a partial success, not a clean row failure.
+        var paymentFailed = false;
         if (row.paymentAmount != null && row.paymentAmount! > 0) {
-          await _syncService.recordPayment(
-            membershipId: null,
-            amount: row.paymentAmount!,
-            paymentMethod: 'cash',
-            paidAt: row.joinDate ?? DateTime.now(),
-            notes: 'دفعة مستوردة',
-          );
+          try {
+            await _syncService.recordPayment(
+              membershipId: null,
+              amount: row.paymentAmount!,
+              paymentMethod: 'cash',
+              paidAt: row.joinDate ?? DateTime.now(),
+              notes: 'دفعة مستوردة',
+            );
+          } catch (_) {
+            paymentFailed = true;
+            partialFailureCount++;
+          }
         }
 
         importedCount++;
+        if (paymentFailed) failedCount++;
 
         // Log row status in remote import_rows
         try {
@@ -339,11 +349,12 @@ class CsvImportService {
             'phone': row.phone,
             'join_date': row.joinDate?.toIso8601String().substring(0, 10),
             'payment_amount': row.paymentAmount,
-            'status': 'completed',
+            'status': paymentFailed ? 'failed' : 'completed',
+            if (paymentFailed) 'error_message': 'تم إنشاء العضو لكن تعذر تسجيل الدفعة',
             'member_id': member.id,
             'created_at': DateTime.now().toIso8601String(),
           });
-        } catch (_) {}
+        } catch (_) { auditFailureCount++; }
       } catch (e) {
         failedCount++;
         try {
@@ -359,27 +370,39 @@ class CsvImportService {
             'error_message': e.toString(),
             'created_at': DateTime.now().toIso8601String(),
           });
-        } catch (_) {}
+        } catch (_) { auditFailureCount++; }
       }
     }
 
     // Complete batch
     try {
       await _supabase.from(SupabaseConstants.tableImportBatches).update({
-        'status': failedCount == 0 ? 'completed' : 'completed_with_errors',
+        'status': (failedCount == 0 && auditFailureCount == 0) ? 'completed' : 'completed_with_errors',
         'imported_rows': importedCount,
         'failed_rows': failedCount,
         'completed_at': DateTime.now().toIso8601String(),
       }).eq('id', batchId);
-    } catch (_) {}
+    } catch (e) {
+      throw Exception('تمت معالجة $importedCount صفًا، لكن تعذر إغلاق سجل الاستيراد. Batch ID: $batchId');
+    }
 
-    // Synchronize latest cache
-    await _syncService.syncAll();
+    // Synchronization refresh is best-effort: local/remote writes may already
+    // have succeeded. Do not report the entire import as failed because refresh failed.
+    var syncFailed = false;
+    try {
+      await _syncService.syncAll();
+      syncFailed = _syncService.syncStatus == SyncStatus.error;
+    } catch (_) {
+      syncFailed = true;
+    }
 
     return {
       'total': totalRows,
       'imported': importedCount,
       'failed': failedCount,
+      'audit_failed': auditFailureCount,
+      'partial': partialFailureCount,
+      'sync_failed': syncFailed ? 1 : 0,
     };
   }
 }
