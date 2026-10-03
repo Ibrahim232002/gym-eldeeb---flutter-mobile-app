@@ -218,6 +218,17 @@ class CsvImportService {
     return double.tryParse(thousands);
   }
 
+  static String? _normalizePhoneForDuplicate(String? value) {
+    if (value == null) return null;
+    var digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return null;
+    if (digits.startsWith('00')) digits = digits.substring(2);
+    if (digits.startsWith('20') && digits.length == 12) return digits;
+    if (digits.startsWith('0') && digits.length == 11) return '20${digits.substring(1)}';
+    if (digits.startsWith('1') && digits.length == 10) return '20$digits';
+    return digits;
+  }
+
   /// Execute final import to Supabase and Local Cache
   Future<Map<String, int>> executeImport({
     required String gymId,
@@ -228,19 +239,40 @@ class CsvImportService {
     final batchId = const Uuid().v4();
     final totalRows = rowsToImport.length;
 
-    // Create import batch in remote Supabase (failsafe: offline handling also loads cached sync)
+    final actorId = _supabase.auth.currentUser?.id;
+    if (actorId == null || actorId.isEmpty) {
+      throw Exception('جلسة المستخدم غير صالحة، يرجى تسجيل الدخول مجدداً');
+    }
+
+    // The audit batch is mandatory so an import is never untraceable.
     try {
       await _supabase.from(SupabaseConstants.tableImportBatches).insert({
         'id': batchId,
         'gym_id': gymId,
-        'imported_by': importedBy,
+        'imported_by': actorId,
         'source_type': 'csv',
         'file_name': fileName,
         'total_rows': totalRows,
         'status': 'processing',
         'created_at': DateTime.now().toIso8601String(),
       });
-    } catch (_) {}
+    } catch (_) {
+      throw Exception('تعذر بدء سجل الاستيراد. تحقق من الاتصال والصلاحيات ثم حاول مرة أخرى.');
+    }
+
+    final existingPhoneKeys = <String>{};
+    try {
+      final existingRows = await _supabase
+          .from(SupabaseConstants.tableMembers)
+          .select('phone')
+          .eq('gym_id', gymId);
+      for (final item in existingRows as List) {
+        final key = _normalizePhoneForDuplicate(item['phone'] as String?);
+        if (key != null) existingPhoneKeys.add(key);
+      }
+    } catch (_) {
+      throw Exception('تعذر التحقق من الأعضاء الحاليين لمنع التكرار.');
+    }
 
     var importedCount = 0;
     var failedCount = 0;
@@ -252,6 +284,26 @@ class CsvImportService {
       }
 
       try {
+        final phoneKey = _normalizePhoneForDuplicate(row.phone);
+        if (phoneKey != null && existingPhoneKeys.contains(phoneKey)) {
+          failedCount++;
+          try {
+            await _supabase.from(SupabaseConstants.tableImportRows).insert({
+              'id': const Uuid().v4(),
+              'batch_id': batchId,
+              'gym_id': gymId,
+              'row_number': row.rowNumber,
+              'raw_data': row.rawData,
+              'full_name': row.fullName,
+              'phone': row.phone,
+              'status': 'failed',
+              'error_message': 'عضو بنفس رقم الهاتف موجود بالفعل في الجيم',
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          } catch (_) {}
+          continue;
+        }
+
         // 1. Add Member
         final member = await _syncService.addMember(
           fullName: row.fullName!,
@@ -259,6 +311,8 @@ class CsvImportService {
           notes: 'مستورد من ملف CSV',
           joinDate: row.joinDate ?? DateTime.now(),
         );
+
+        if (phoneKey != null) existingPhoneKeys.add(phoneKey);
 
         // 2. Add Payment if paymentAmount is defined
         if (row.paymentAmount != null && row.paymentAmount! > 0) {
@@ -312,7 +366,7 @@ class CsvImportService {
     // Complete batch
     try {
       await _supabase.from(SupabaseConstants.tableImportBatches).update({
-        'status': 'completed',
+        'status': failedCount == 0 ? 'completed' : 'completed_with_errors',
         'imported_rows': importedCount,
         'failed_rows': failedCount,
         'completed_at': DateTime.now().toIso8601String(),
