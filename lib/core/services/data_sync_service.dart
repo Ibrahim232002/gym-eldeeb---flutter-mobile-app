@@ -286,6 +286,7 @@ class DataSyncService extends ChangeNotifier {
 
       // 1. Process pending offline queue
       final queue = await _getPendingQueue();
+      var queueFailures = 0;
       if (queue.isNotEmpty) {
         final remaining = <PendingAction>[];
         for (final item in queue) {
@@ -293,15 +294,22 @@ class DataSyncService extends ChangeNotifier {
             await _executePendingActionOnRemote(item);
           } catch (_) {
             remaining.add(item);
+            queueFailures++;
           }
         }
         await _savePendingQueue(remaining);
       }
 
-      // 2. Fetch fresh remote data and update local cache
+      // 2. Fetch fresh remote data and update local cache.
+      // Keep the status honest if any queued operation could not be applied.
       await _fetchRemoteData(gymId);
 
-      _syncStatus = SyncStatus.synced;
+      if (queueFailures > 0) {
+        _syncStatus = SyncStatus.error;
+        _syncErrorMessage = 'تعذر مزامنة $queueFailures عملية معلقة. ستتم المحاولة مرة أخرى.';
+      } else {
+        _syncStatus = SyncStatus.synced;
+      }
     } catch (e) {
       _syncStatus = SyncStatus.error;
       _syncErrorMessage = e.toString().replaceAll('Exception: ', '');
