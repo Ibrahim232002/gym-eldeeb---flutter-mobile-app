@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties on your machine.
+# Never commit android/key.properties, the keystore, or passwords to Git.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=gym_eldeeb
+storeFile=../app/gym_eldeeb-release.jks

@@ -1,20 +1,43 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Gym ElDeeb — Flutter Mobile App
 
-# Run and deploy your AI Studio app
+Arabic-first gym management application built with Flutter, Riverpod, GoRouter, and Supabase.
 
-This contains everything you need to run your app locally.
+## Requirements
+- Flutter SDK compatible with the constraints in `pubspec.yaml`
+- Dart SDK compatible with the constraints in `pubspec.yaml`
 
-View your app in AI Studio: https://ai.studio/apps/3d48df9b-5cdb-4f94-81a4-c832155eb11c
+## Run locally
 
-## Run Locally
+```bash
+flutter pub get
+flutter run
+```
 
-**Prerequisites:**  Node.js
+## Validate
+
+```bash
+flutter analyze
+flutter test
+```
+
+## Backend configuration
+
+The app uses the Supabase project URL and publishable client key configured in `lib/core/constants/supabase_constants.dart`. Only a publishable/anon key belongs in a client application. Never place a Supabase service-role key or other privileged secret in Flutter source or a distributed app.
+
+The application also relies on the configured Supabase database schema and the `join-gym` Edge Function.
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Android release signing
+
+Release builds never fall back to the Android debug key. Before producing a distributable APK/AAB:
+
+1. Create a private upload/release keystore and keep it outside Git.
+2. Copy `android/key.properties.example` to `android/key.properties`.
+3. Fill in the keystore path, alias, and passwords.
+4. Keep `android/key.properties` and all `.jks` files out of source control.
+
+Without `android/key.properties`, a release build is intentionally left unsigned instead of using the debug key.
+
+## Security / RLS audit
+
+See `docs/RLS_AUDIT.sql` for the repeatable database checks. RLS must be verified with separate authenticated accounts from different gyms; running queries in the SQL editor alone is not a substitute for client-session testing.

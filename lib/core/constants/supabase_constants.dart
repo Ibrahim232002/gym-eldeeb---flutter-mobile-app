@@ -26,6 +26,4 @@ class SupabaseConstants {
   static const String tablePayments = 'payments';
   static const String tableSyncMetadata = 'sync_metadata';
   static const String tableGymInvites = 'gym_invites';
-  static const String tableImportBatches = 'import_batches';
-  static const String tableImportRows = 'import_rows';
 }

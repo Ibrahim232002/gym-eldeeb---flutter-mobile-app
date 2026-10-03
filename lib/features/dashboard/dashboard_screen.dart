@@ -9,7 +9,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/rtl_support.dart';
 import '../../core/services/data_sync_service.dart';
 import '../../core/services/whatsapp_service.dart';
-import '../../core/services/csv_import_service.dart';
 
 import '../../data/models/member.dart';
 import '../../data/models/membership_plan.dart';
@@ -83,7 +82,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 _buildDrawerItem(2, 'خطط الاشتراكات', Icons.card_membership_rounded, currentTab),
                 _buildDrawerItem(3, 'الاشتراكات الحالية', Icons.sports_gymnastics_rounded, currentTab),
                 _buildDrawerItem(4, 'سجل المدفوعات', Icons.payments_rounded, currentTab),
-                _buildDrawerItem(5, 'استيراد CSV', Icons.file_upload_rounded, currentTab),
                 _buildDrawerItem(6, 'الملف الشخصي والإعدادات', Icons.settings_rounded, currentTab),
               ],
             ),
@@ -128,7 +126,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(AppColors.primary)),
                   )
                 : const Icon(Icons.sync_rounded),
-            tooltip: 'مزامنة البيانات سحابياً',
+            tooltip: 'تحديث البيانات',
             onPressed: syncService.syncStatus == SyncStatus.syncing ? null : () => syncService.syncAll(),
           ),
         ],
@@ -181,15 +179,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case 0:
         return 'لوحة إحصائيات جيم الديب';
       case 1:
-        return 'كادر الأعضاء المشتركين';
+        return 'الأعضاء';
       case 2:
         return 'خطط وباقات الاشتراكات';
       case 3:
         return 'سجل الاشتراكات الفعالة';
       case 4:
         return 'سجل المدفوعات والإيرادات';
-      case 5:
-        return 'مركز استيراد الكشوفات CSV';
       case 6:
         return 'الإعدادات والملف الشخصي';
       default:
@@ -209,8 +205,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return const _MembershipsTab();
       case 4:
         return const _PaymentsTab();
-      case 5:
-        return const _CsvImportTab();
       case 6:
         return const _SettingsTab();
       default:
@@ -356,7 +350,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'خطأ مزامنة: ${data.syncErrorMessage}',
+                      'فيه بيانات لسه متسجلتش على الحساب. هنحاول تاني لما الاتصال يستقر.',
                       style: const TextStyle(color: AppColors.error, fontSize: 13),
                     ),
                   ),
@@ -432,10 +426,10 @@ class _DashboardOverviewTab extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
+                      ElevatedButton.icon(
                           onPressed: () {
                             showDialog(
                               context: context,
@@ -446,10 +440,8 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           icon: const Icon(Icons.person_add_rounded, size: 16),
                           label: const Text('إضافة عضو', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
                           onPressed: () {
                             showDialog(
                               context: context,
@@ -460,14 +452,13 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           icon: const Icon(Icons.card_membership_rounded, size: 16),
                           label: const Text('اشتراك جديد', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
+                      OutlinedButton.icon(
                           onPressed: () {
                             showDialog(
                               context: context,
@@ -478,17 +469,14 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           icon: const Icon(Icons.payment_rounded, size: 16),
                           label: const Text('تسجيل دفعة', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
                           onPressed: () {
                             ref.read(selectedTabProvider.notifier).state = 5;
                           },
                           icon: const Icon(Icons.upload_file_rounded, size: 16),
                           label: const Text('استيراد CSV', style: TextStyle(fontSize: 12)),
                         ),
-                      ),
                     ],
                   ),
                 ],
@@ -743,12 +731,12 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _buildFilterChip('all', 'الكل (${data.members.length})'),
-                  const SizedBox(width: 8),
                   _buildFilterChip('active', 'نشط (${data.members.where((m) => m.isActive).length})'),
-                  const SizedBox(width: 8),
                   _buildFilterChip('inactive', 'غير نشط (${data.members.where((m) => !m.isActive).length})'),
                 ],
               ),
@@ -1952,6 +1940,7 @@ class _MembershipsTab extends ConsumerWidget {
                           children: [
                             Text('الباقة: ${plan.name} • القيمة: ${RtlSupport.formatEgp(membership.price)}', style: const TextStyle(fontSize: 12)),
                             Text('من: ${RtlSupport.formatDate(membership.startDate)} إلى ${RtlSupport.formatDate(membership.endDate)}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                            Text('سجّل الاشتراك: ${data.creatorName(membership.createdBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                           ],
                         ),
                         trailing: Row(
@@ -2391,6 +2380,8 @@ class _PaymentsTab extends ConsumerWidget {
                                   payment.notes ?? 'إيصال دفع',
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                 ),
+                                const SizedBox(height: 3),
+                                Text('سجّل الدفعة: ${data.creatorName(payment.recordedBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
                                 const SizedBox(height: 4),
                                 Text(
                                   RtlSupport.formatEgp(payment.amount),
@@ -2750,189 +2741,6 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
 }
 
 // ==========================================
-// --- TAB 5: CSV IMPORT WORKSTATION ---
-// ==========================================
-class _CsvImportTab extends ConsumerStatefulWidget {
-  const _CsvImportTab();
-
-  @override
-  ConsumerState<_CsvImportTab> createState() => _CsvImportTabState();
-}
-
-class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
-  List<ParsedImportRow> _parsedRows = [];
-  bool _isLoading = false;
-  String? _fileName;
-
-  void _pickAndParse() async {
-    setState(() => _isLoading = true);
-    try {
-      final rows = await ref.read(csvImportServiceProvider).pickAndParseCsv();
-      setState(() {
-        _parsedRows = rows;
-        _fileName = 'كشف_الأعضاء.csv';
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString(), textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _triggerImport() async {
-    if (_parsedRows.isEmpty) return;
-    setState(() => _isLoading = true);
-
-    final auth = ref.read(authNotifierProvider);
-    final gymId = auth.gym?.id ?? auth.profile?.gymId;
-    final importedBy = auth.profile?.id;
-
-    if (gymId == null) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('معرف الجيم غير متوفر')));
-      return;
-    }
-
-    try {
-      final results = await ref.read(csvImportServiceProvider).executeImport(
-            gymId: gymId,
-            fileName: _fileName ?? 'import_csv.csv',
-            rowsToImport: _parsedRows,
-            importedBy: importedBy,
-          );
-
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => Directionality(
-          textDirection: ui.TextDirection.rtl,
-          child: AlertDialog(
-            backgroundColor: AppColors.surfaceCard,
-            title: const Text('اكتمل الاستيراد بنجاح!'),
-            content: Text(
-              'إجمالي السطور المعالجة: ${results['total']}\n'
-              'تم استيراد بنجاح: ${results['imported']} أعضاء\n'
-              'فشل: ${results['failed']}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  setState(() {
-                    _parsedRows = [];
-                    _fileName = null;
-                  });
-                  ref.read(selectedTabProvider.notifier).state = 1; // View members
-                },
-                child: const Text('رؤية الأعضاء الجدد'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString(), textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'مركز استيراد بيانات الأعضاء والكشوفات القديمة',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'قم برفع كشف الأعضاء المكتوب بصيغة CSV ليقوم جيم الديب بتحليله آلياً وربطه بقواعد البيانات السحابية والمحلية مباشرة.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 20),
-
-          if (_parsedRows.isEmpty) ...[
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: AppColors.primary.withOpacity(0.12),
-                      child: const Icon(Icons.file_copy_rounded, color: AppColors.primary, size: 36),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _pickAndParse,
-                      icon: const Icon(Icons.file_upload_rounded),
-                      label: _isLoading
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Color(0xFF0F141C))))
-                          : const Text('اختيار ملف CSV من الهاتف'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ] else ...[
-            Text('معاينة السطور الجاهزة للاستيراد (${_parsedRows.length} سطر):', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _parsedRows.length,
-                itemBuilder: (context, index) {
-                  final row = _parsedRows[index];
-                  final isInvalid = row.status == 'invalid';
-                  return Card(
-                    color: isInvalid ? AppColors.error.withOpacity(0.08) : AppColors.surface,
-                    child: ListTile(
-                      title: Text(row.fullName ?? 'بدون اسم', style: TextStyle(fontWeight: FontWeight.bold, color: isInvalid ? AppColors.error : AppColors.textPrimary)),
-                      subtitle: Text('تليفون: ${row.phone ?? "غير محدد"} • انضمام: ${row.joinDate != null ? DateFormat('yyyy/MM/dd').format(row.joinDate!) : "اليوم"}', style: const TextStyle(fontSize: 11)),
-                      trailing: isInvalid
-                          ? const Icon(Icons.error_outline_rounded, color: AppColors.error)
-                          : const Icon(Icons.check_circle_outline_rounded, color: AppColors.success),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => setState(() => _parsedRows = []),
-                    child: const Text('إلغاء واختيار ملف آخر'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _triggerImport,
-                    child: _isLoading ? const CircularProgressIndicator() : const Text('بدء المزامنة والاستيراد'),
-                  ),
-                ),
-              ],
-            )
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================
 // --- TAB 6: SETTINGS & PROFILE TAB ---
 // ==========================================
 class _SettingsTab extends ConsumerWidget {
@@ -2952,13 +2760,14 @@ class _SettingsTab extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('معلومات الصالة الرياضية (جيم الديب)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              TextButton.icon(
-                onPressed: () {
-                  showDialog(context: context, builder: (_) => _EditGymInfoDialog(gym: auth.gym));
-                },
-                icon: const Icon(Icons.edit_rounded, size: 16),
-                label: const Text('تعديل بيانات الجيم'),
-              ),
+              if (auth.profile?.isOwner == true)
+                TextButton.icon(
+                  onPressed: () {
+                    showDialog(context: context, builder: (_) => _EditGymInfoDialog(gym: auth.gym));
+                  },
+                  icon: const Icon(Icons.edit_rounded, size: 16),
+                  label: const Text('تعديل بيانات الجيم'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -3045,15 +2854,25 @@ class _SettingsTab extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('حالة المزامنة والربط السحابي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('حالة تحديث البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               TextButton.icon(
                 onPressed: () async {
-                  await ref.read(dataSyncServiceProvider.notifier).syncAll();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تمت مزامنة الجداول بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
-                    );
-                  }
+                  final sync = ref.read(dataSyncServiceProvider.notifier);
+                  await sync.syncAll(forceRetry: true);
+                  if (!context.mounted) return;
+
+                  final state = ref.read(dataSyncServiceProvider);
+                  final message = state.syncStatus == SyncStatus.synced
+                      ? 'تمت مزامنة البيانات بنجاح.'
+                      : (state.syncErrorMessage ?? 'تعذرت المزامنة، راجع البيانات أو الصلاحيات.');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(message, textDirection: ui.TextDirection.rtl),
+                      backgroundColor: state.syncStatus == SyncStatus.synced
+                          ? AppColors.success
+                          : AppColors.error,
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('مزامنة فورية'),
@@ -3069,7 +2888,7 @@ class _SettingsTab extends ConsumerWidget {
                 children: [
                   _buildSettingRow('الاتصال بالإنترنت', syncService.isOffline ? 'غير متصل (Offline)' : 'متصل بالشبكة (Online)'),
                   const Divider(),
-                  _buildSettingRow('حالة مزامنة الجداول', syncService.syncStatus == SyncStatus.synced ? 'مكتملة ومؤمنة (Synced)' : 'معلقة / جاري المزامنة'),
+                  _buildSettingRow('حالة تحديث البيانات', syncService.syncStatus == SyncStatus.synced ? 'مكتملة ومؤمنة (Synced)' : 'في انتظار التحديث / جاري التحديث'),
                 ],
               ),
             ),
@@ -3089,12 +2908,24 @@ class _SettingsTab extends ConsumerWidget {
 
   Widget _buildSettingRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          SelectableText(
+            value,
+            textAlign: TextAlign.start,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );
@@ -3386,6 +3217,7 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
 
     setState(() => _isSaving = true);
 
+    var membershipCreated = false;
     try {
       final data = ref.read(dataSyncServiceProvider);
       final plan = data.plans.where((p) => p.id == _selectedPlanId).firstOrNull;
@@ -3393,13 +3225,26 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
       final price = double.tryParse(_priceCtrl.text) ?? plan?.price ?? 0.0;
       final endDate = _startDate.add(Duration(days: durationDays));
 
-      await ref.read(dataSyncServiceProvider.notifier).createMembership(
+      final membership = await ref.read(dataSyncServiceProvider.notifier).createMembership(
             memberId: _selectedMemberId!,
             planId: _selectedPlanId,
             startDate: _startDate,
             endDate: endDate,
             price: price,
           );
+      membershipCreated = true;
+
+      // The form labels this value as the amount paid, so keep the cash ledger
+      // consistent with the membership created from the same submission.
+      if (price > 0) {
+        await ref.read(dataSyncServiceProvider.notifier).recordPayment(
+              membershipId: membership.id,
+              amount: price,
+              paymentMethod: 'cash',
+              paidAt: DateTime.now(),
+              notes: 'دفعة تفعيل اشتراك',
+            );
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -3409,10 +3254,21 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل تسجيل الاشتراك: $e', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
-      );
+      if (membershipCreated) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم إنشاء الاشتراك، لكن تعذّر تسجيل الدفعة. راجع سجل المدفوعات قبل إعادة التسجيل. ($e)', textDirection: ui.TextDirection.rtl),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 7),
+          ),
+        );
+      } else {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل تسجيل الاشتراك: $e', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 

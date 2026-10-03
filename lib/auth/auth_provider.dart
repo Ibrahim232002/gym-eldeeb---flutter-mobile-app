@@ -92,7 +92,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _repository.signIn(email: email, password: password);
       await refreshUserSession();
-      return true;
+      return state.isAuthenticated;
     } catch (e) {
       state = AuthState.unauthenticated(_cleanError(e));
       return false;
@@ -111,7 +111,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fullName: fullName,
       );
       await refreshUserSession();
-      return true;
+      return state.isAuthenticated;
     } catch (e) {
       state = AuthState.unauthenticated(_cleanError(e));
       return false;
@@ -131,7 +131,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         inviteCode: inviteCode,
       );
       await refreshUserSession();
-      return true;
+      return state.isAuthenticated;
     } catch (e) {
       final errorMsg = _cleanError(e);
       state = AuthState.error(errorMsg);
@@ -146,8 +146,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Real Sign Out
   Future<void> signOut() async {
     state = AuthState.loading();
-    await _repository.signOut();
-    state = AuthState.unauthenticated();
+    try {
+      await _repository.signOut();
+    } finally {
+      // Do not leave protected routes in a loading state if local cleanup fails.
+      state = AuthState.unauthenticated();
+    }
   }
 
   String _cleanError(dynamic e) {

@@ -60,11 +60,25 @@ class LocalStorageService {
     }
   }
 
-  /// Clear all cached authentication & gym data on logout
+  /// Clear account-scoped snapshots on logout while preserving pending writes.
+  /// Pending queues are intentionally retained for later recovery by their owner;
+  /// they must never be replayed under a different authenticated account.
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyCachedProfile);
-    await prefs.remove(_keyCachedGym);
-    await prefs.remove(_keyLastSyncAt);
+    final keys = prefs.getKeys();
+    final cacheKeys = keys.where((key) =>
+        key == _keyCachedProfile ||
+        key == _keyCachedGym ||
+        key == _keyLastSyncAt ||
+        key == 'cached_user_gym' ||
+        key.startsWith('cache_members_') ||
+        key.startsWith('cache_plans_') ||
+        key.startsWith('cache_memberships_') ||
+        key.startsWith('cache_payments_'));
+    for (final key in cacheKeys) {
+      await prefs.remove(key);
+    }
+    // Do not remove pending_queue_*: queued business operations may represent
+    // unsynced work and require explicit same-account recovery.
   }
 }

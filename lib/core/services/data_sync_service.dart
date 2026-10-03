@@ -21,25 +21,34 @@ enum SyncStatus { synced, syncing, offline, error }
 class PendingAction {
   final String id;
   final String table;
+  final String ownerUserId;
   final String action; // 'create', 'update', 'delete'
   final Map<String, dynamic> payload;
   final DateTime createdAt;
+  final int retryCount;
+  final String? lastError;
 
   PendingAction({
     required this.id,
     required this.table,
+    required this.ownerUserId,
     required this.action,
     required this.payload,
     required this.createdAt,
+    this.retryCount = 0,
+    this.lastError,
   });
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'table': table,
+      'ownerUserId': ownerUserId,
       'action': action,
       'payload': payload,
       'createdAt': createdAt.toIso8601String(),
+      'retryCount': retryCount,
+      'lastError': lastError,
     };
   }
 
@@ -47,9 +56,14 @@ class PendingAction {
     return PendingAction(
       id: json['id'] as String,
       table: json['table'] as String,
+      // Older queued actions may not contain an owner. Keep them unclaimed rather than
+      // assigning them to whichever account happens to sign in next.
+      ownerUserId: json['ownerUserId'] as String? ?? '',
       action: json['action'] as String,
       payload: json['payload'] as Map<String, dynamic>,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      retryCount: json['retryCount'] as int? ?? 0,
+      lastError: json['lastError'] as String?,
     );
   }
 }
@@ -94,6 +108,7 @@ class DataSyncService extends ChangeNotifier {
 
   SyncStatus _syncStatus = SyncStatus.synced;
   String? _syncErrorMessage;
+  bool _syncInProgress = false;
 
   List<Member> _members = [];
   List<MembershipPlan> _plans = [];
@@ -119,8 +134,30 @@ class DataSyncService extends ChangeNotifier {
   List<MembershipPlan> get plans => _plans.where((p) => p.deletedAt == null).toList();
   List<Membership> get memberships => _memberships.where((m) => m.deletedAt == null).toList();
   List<Payment> get payments => _payments;
+  final Map<String, String> _creatorNames = {};
+  String creatorName(String? userId) => userId == null ? 'غير معروف' : (_creatorNames[userId] ?? 'عضو من فريق الجيم');
 
   bool get isOffline => _syncStatus == SyncStatus.offline;
+  static const int _maxAutomaticRetries = 5;
+
+  bool _isPermanentSyncError(Object error) {
+    if (error is PostgrestException) {
+      const permanentCodes = {
+        '42501', // insufficient_privilege / RLS
+        '42703', // undefined_column
+        '42P01', // undefined_table
+        '23502', // not_null_violation
+        '23503', // foreign_key_violation
+        '23514', // check_violation
+        '23522', // numeric_value_out_of_range
+      };
+      return permanentCodes.contains(error.code);
+    }
+    return false;
+  }
+
+  // Prefer the live authenticated identity over the provider's cached profile.
+  String? get _actorUserId => _supabase.auth.currentUser?.id ?? _userId;
 
   // --- Resolve Gym ID ---
   Future<String> requireGymId() async {
@@ -128,33 +165,28 @@ class DataSyncService extends ChangeNotifier {
       return _gymId!;
     }
 
-    // 1. Check SharedPreferences cached profile
+    // Resolve identity before consulting any persisted profile data. Never trust
+    // a cached gym association when it cannot be tied to the active account.
+    final currentUser = _supabase.auth.currentUser;
+    final expectedUserId = currentUser?.id ?? _userId;
+    if (expectedUserId == null || expectedUserId.isEmpty) {
+      throw Exception('المستخدم غير مسجل');
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final cachedProfileStr = prefs.getString('cached_user_profile');
     if (cachedProfileStr != null) {
       try {
-        final map = jsonDecode(cachedProfileStr);
-        if (map['gym_id'] != null && (map['gym_id'] as String).isNotEmpty) {
+        final map = jsonDecode(cachedProfileStr) as Map<String, dynamic>;
+        if (map['id'] == expectedUserId && map['gym_id'] is String && (map['gym_id'] as String).isNotEmpty) {
           _gymId = map['gym_id'] as String;
           return _gymId!;
         }
       } catch (_) {}
     }
 
-    // 2. Check SharedPreferences cached gym
-    final cachedGymStr = prefs.getString('cached_user_gym');
-    if (cachedGymStr != null) {
-      try {
-        final map = jsonDecode(cachedGymStr);
-        if (map['id'] != null && (map['id'] as String).isNotEmpty) {
-          _gymId = map['id'] as String;
-          return _gymId!;
-        }
-      } catch (_) {}
-    }
-
-    // 3. Fallback: Query Supabase profiles table directly
-    final currentUser = _supabase.auth.currentUser;
+    // Query the authenticated user's profile; cached gym data has no reliable
+    // ownership marker and is deliberately not used as an identity fallback.
     if (currentUser != null) {
       try {
         final res = await _supabase.from('profiles').select('gym_id').eq('id', currentUser.id).maybeSingle();
@@ -173,19 +205,22 @@ class DataSyncService extends ChangeNotifier {
   String get _keyPlans => 'cache_plans_${_gymId ?? "default"}';
   String get _keyMemberships => 'cache_memberships_${_gymId ?? "default"}';
   String get _keyPayments => 'cache_payments_${_gymId ?? "default"}';
-  String get _keyPendingQueue => 'pending_queue_${_gymId ?? "default"}';
+  String get _keyPendingQueue => 'pending_queue_${_userId ?? "unclaimed"}_${_gymId ?? "default"}';
 
   // --- Initialize & Local Loading ---
   Future<void> _loadAllFromLocalCache() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // If _gymId is null, attempt to resolve from cached profile
+    // Only use a cached association when its profile belongs to the active user.
     if (_gymId == null) {
+      final activeUserId = _supabase.auth.currentUser?.id ?? _userId;
       final cachedProfileStr = prefs.getString('cached_user_profile');
-      if (cachedProfileStr != null) {
+      if (activeUserId != null && cachedProfileStr != null) {
         try {
-          final map = jsonDecode(cachedProfileStr);
-          if (map['gym_id'] != null) _gymId = map['gym_id'] as String;
+          final map = jsonDecode(cachedProfileStr) as Map<String, dynamic>;
+          if (map['id'] == activeUserId && map['gym_id'] is String && (map['gym_id'] as String).isNotEmpty) {
+            _gymId = map['gym_id'] as String;
+          }
         } catch (_) {}
       }
     }
@@ -246,8 +281,10 @@ class DataSyncService extends ChangeNotifier {
     try {
       final list = jsonDecode(str) as List<dynamic>;
       return list.map((item) => PendingAction.fromJson(item as Map<String, dynamic>)).toList();
-    } catch (_) {
-      return [];
+    } catch (e) {
+      // Never treat unreadable persisted work as an empty queue: callers must
+      // stop before saving, otherwise this could overwrite and destroy it.
+      throw FormatException('تعذر قراءة العمليات المحلية المعلقة؛ تم الحفاظ على البيانات الأصلية.', e);
     }
   }
 
@@ -262,6 +299,7 @@ class DataSyncService extends ChangeNotifier {
     queue.add(PendingAction(
       id: const Uuid().v4(),
       table: table,
+      ownerUserId: _userId ?? _supabase.auth.currentUser?.id ?? (throw StateError('لا يمكن حفظ عملية بدون حساب مسجل')),
       action: action,
       payload: payload,
       createdAt: DateTime.now(),
@@ -270,42 +308,85 @@ class DataSyncService extends ChangeNotifier {
   }
 
   // --- Global Synchronization ---
-  Future<void> syncAll() async {
-    final online = await _networkInfo.isConnected;
-    if (!online) {
-      _syncStatus = SyncStatus.offline;
-      notifyListeners();
-      return;
-    }
+  Future<void> syncAll({bool forceRetry = false}) async {
+    if (_syncInProgress) return;
+    _syncInProgress = true;
 
     try {
+      final online = await _networkInfo.isConnected;
+      if (!online) {
+        _syncStatus = SyncStatus.offline;
+        notifyListeners();
+        return;
+      }
+
       final gymId = await requireGymId();
       _syncStatus = SyncStatus.syncing;
       _syncErrorMessage = null;
       notifyListeners();
 
-      // 1. Process pending offline queue
       final queue = await _getPendingQueue();
-      if (queue.isNotEmpty) {
-        final remaining = <PendingAction>[];
-        for (final item in queue) {
-          try {
-            await _executePendingActionOnRemote(item);
-          } catch (_) {
-            remaining.add(item);
-          }
+      final remaining = <PendingAction>[];
+      var failedCount = 0;
+      var blockedCount = 0;
+
+      for (final item in queue) {
+        final activeUserId = _supabase.auth.currentUser?.id;
+        if (activeUserId == null || activeUserId != item.ownerUserId) {
+          // Keep the operation intact; never replay one account's queue as another.
+          remaining.add(item);
+          blockedCount++;
+          continue;
         }
-        await _savePendingQueue(remaining);
+        if (!forceRetry && item.retryCount >= _maxAutomaticRetries) {
+          remaining.add(item);
+          blockedCount++;
+          continue;
+        }
+
+        try {
+          await _executePendingActionOnRemote(item);
+        } catch (e) {
+          final permanent = _isPermanentSyncError(e);
+          final retryCount = permanent
+              ? _maxAutomaticRetries
+              : item.retryCount + 1;
+          remaining.add(PendingAction(
+            id: item.id,
+            table: item.table,
+            ownerUserId: item.ownerUserId,
+            action: item.action,
+            payload: item.payload,
+            createdAt: item.createdAt,
+            retryCount: retryCount,
+            lastError: e.toString(),
+          ));
+          failedCount++;
+        }
       }
 
-      // 2. Fetch fresh remote data and update local cache
-      await _fetchRemoteData(gymId);
+      await _savePendingQueue(remaining);
 
-      _syncStatus = SyncStatus.synced;
+      // Do not replace optimistic local records while a queued write is still
+      // failing. Once the queue is clear, refresh from the authoritative source.
+      if (failedCount == 0 && blockedCount == 0) {
+        await _fetchRemoteData(gymId);
+        _syncStatus = SyncStatus.synced;
+      } else {
+        _syncStatus = SyncStatus.error;
+        if (blockedCount > 0) {
+          _syncErrorMessage =
+              'هناك $blockedCount عملية معلقة لم تُنفذ: قد تكون لحساب آخر، أو تحتاج إعادة محاولة يدوية، أو بياناتها القديمة بلا مالك محدد. لم يتم حذفها.';
+        } else {
+          _syncErrorMessage =
+              'تعذر مزامنة $failedCount عملية. ستتم إعادة المحاولة تلقائياً للأخطاء المؤقتة.';
+        }
+      }
     } catch (e) {
       _syncStatus = SyncStatus.error;
       _syncErrorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
+      _syncInProgress = false;
       notifyListeners();
     }
   }
@@ -317,17 +398,25 @@ class DataSyncService extends ChangeNotifier {
     else if (action.table == 'memberships') table = SupabaseConstants.tableMemberships;
     else if (action.table == 'payments') table = SupabaseConstants.tablePayments;
 
-    if (table.isEmpty) return;
+    if (table.isEmpty) {
+      throw StateError('Unsupported pending sync table: ${action.table}');
+    }
 
     if (action.action == 'create') {
       await _supabase.from(table).upsert(action.payload);
     } else if (action.action == 'update') {
       await _supabase.from(table).update(action.payload).eq('id', action.payload['id'] as Object);
     } else if (action.action == 'delete') {
-      await _supabase.from(table).update({
-        'deleted_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', action.payload['id'] as Object);
+      if (action.table == 'payments') {
+        await _supabase.from(table).delete().eq('id', action.payload['id'] as Object);
+      } else {
+        await _supabase.from(table).update({
+          'deleted_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', action.payload['id'] as Object);
+      }
+    } else {
+      throw StateError('Unsupported pending sync action: ${action.action}');
     }
   }
 
@@ -369,6 +458,25 @@ class DataSyncService extends ChangeNotifier {
         .order('paid_at', ascending: false);
     _payments = (paymentsResponse as List).map((json) => Payment.fromJson(json as Map<String, dynamic>)).toList();
     await prefs.setString(_keyPayments, jsonEncode(_payments.map((p) => p.toJson()).toList()));
+
+    // Resolve actor names for the audit labels shown in the app.
+    final actorIds = <String>{
+      ..._members.map((item) => item.createdBy).whereType<String>(),
+      ..._memberships.map((item) => item.createdBy).whereType<String>(),
+      ..._payments.map((item) => item.recordedBy).whereType<String>(),
+    }.toList();
+    if (actorIds.isNotEmpty) {
+      try {
+        final profiles = await _supabase.from('profiles').select('id, full_name').inFilter('id', actorIds);
+        for (final row in profiles as List) {
+          final id = row['id'] as String?;
+          final name = row['full_name'] as String?;
+          if (id != null && name != null && name.trim().isNotEmpty) _creatorNames[id] = name.trim();
+        }
+      } catch (_) {
+        // Keep the UI usable if profile-name lookup is unavailable.
+      }
+    }
   }
 
   // ==========================================
@@ -393,7 +501,7 @@ class DataSyncService extends ChangeNotifier {
       notes: notes?.trim(),
       joinDate: joinDate,
       isActive: true,
-      createdBy: _userId ?? _supabase.auth.currentUser?.id,
+      createdBy: _actorUserId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       syncVersion: 1,
@@ -411,7 +519,7 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMembers).insert(newMember.toJson());
+        await _supabase.from(SupabaseConstants.tableMembers).upsert(newMember.toJson());
       } catch (e) {
         await _addToQueue('members', 'create', newMember.toJson());
       }
@@ -437,6 +545,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMembers).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('members', 'update', edited.toJson());
       }
@@ -461,6 +571,8 @@ class DataSyncService extends ChangeNotifier {
           'deleted_at': DateTime.now().toIso8601String(),
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('members', 'delete', {'id': id});
       }
@@ -500,7 +612,9 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMembershipPlans).insert(newPlan.toJson());
+        await _supabase.from(SupabaseConstants.tableMembershipPlans).upsert(newPlan.toJson());
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('plans', 'create', newPlan.toJson());
       }
@@ -526,6 +640,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMembershipPlans).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('plans', 'update', edited.toJson());
       }
@@ -550,6 +666,8 @@ class DataSyncService extends ChangeNotifier {
           'deleted_at': DateTime.now().toIso8601String(),
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('plans', 'delete', {'id': id});
       }
@@ -580,7 +698,7 @@ class DataSyncService extends ChangeNotifier {
       endDate: endDate,
       price: price,
       status: 'active',
-      createdBy: _userId ?? _supabase.auth.currentUser?.id,
+      createdBy: _actorUserId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -594,7 +712,9 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMemberships).insert(newMembership.toJson());
+        await _supabase.from(SupabaseConstants.tableMemberships).upsert(newMembership.toJson());
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('memberships', 'create', newMembership.toJson());
       }
@@ -624,7 +744,7 @@ class DataSyncService extends ChangeNotifier {
       amount: amount,
       paymentMethod: paymentMethod,
       paidAt: paidAt,
-      recordedBy: _userId ?? _supabase.auth.currentUser?.id,
+      recordedBy: _actorUserId,
       notes: notes?.trim(),
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -639,7 +759,9 @@ class DataSyncService extends ChangeNotifier {
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tablePayments).insert(newPayment.toJson());
+        await _supabase.from(SupabaseConstants.tablePayments).upsert(newPayment.toJson());
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('payments', 'create', newPayment.toJson());
       }
@@ -665,6 +787,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMemberships).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('memberships', 'update', edited.toJson());
       }
@@ -690,6 +814,8 @@ class DataSyncService extends ChangeNotifier {
           'deleted_at': now.toIso8601String(),
           'updated_at': now.toIso8601String(),
         }).eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('memberships', 'delete', {'id': id});
       }
@@ -713,6 +839,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tablePayments).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('payments', 'update', edited.toJson());
       }
@@ -734,6 +862,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tablePayments).delete().eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('payments', 'delete', {'id': id});
       }
