@@ -50,7 +50,7 @@ class AuthRepository {
     required String password,
   }) async {
     final cleanEmail = email.trim();
-    final cleanPassword = password.trim();
+    final cleanPassword = password;
 
     try {
       await _supabase.auth.signInWithPassword(
@@ -80,7 +80,7 @@ class AuthRepository {
     required String fullName,
   }) async {
     final cleanEmail = email.trim();
-    final cleanPassword = password.trim();
+    final cleanPassword = password;
     final cleanName = fullName.trim();
 
     try {
