@@ -8,7 +8,7 @@ FROM pg_tables
 WHERE schemaname = 'public'
   AND tablename IN (
     'profiles','gyms','members','membership_plans',
-    'memberships','payments','gym_invites','import_batches','import_rows'
+    'memberships','payments','gym_invites'
   )
 ORDER BY tablename;
 --
@@ -19,7 +19,7 @@ FROM pg_policies
 WHERE schemaname = 'public'
   AND tablename IN (
     'profiles','gyms','members','membership_plans',
-    'memberships','payments','gym_invites','import_batches','import_rows'
+    'memberships','payments','gym_invites'
   )
 ORDER BY tablename, policyname;
 --
