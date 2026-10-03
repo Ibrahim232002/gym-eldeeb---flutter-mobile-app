@@ -56,7 +56,9 @@ class PendingAction {
     return PendingAction(
       id: json['id'] as String,
       table: json['table'] as String,
-      ownerUserId: json['ownerUserId'] as String,
+      // Older queued actions may not contain an owner. Keep them unclaimed rather than
+      // assigning them to whichever account happens to sign in next.
+      ownerUserId: json['ownerUserId'] as String? ?? '',
       action: json['action'] as String,
       payload: json['payload'] as Map<String, dynamic>,
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -279,8 +281,10 @@ class DataSyncService extends ChangeNotifier {
     try {
       final list = jsonDecode(str) as List<dynamic>;
       return list.map((item) => PendingAction.fromJson(item as Map<String, dynamic>)).toList();
-    } catch (_) {
-      return [];
+    } catch (e) {
+      // Never treat unreadable persisted work as an empty queue: callers must
+      // stop before saving, otherwise this could overwrite and destroy it.
+      throw FormatException('تعذر قراءة العمليات المحلية المعلقة؛ تم الحفاظ على البيانات الأصلية.', e);
     }
   }
 
