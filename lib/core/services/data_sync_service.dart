@@ -21,6 +21,7 @@ enum SyncStatus { synced, syncing, offline, error }
 class PendingAction {
   final String id;
   final String table;
+  final String ownerUserId;
   final String action; // 'create', 'update', 'delete'
   final Map<String, dynamic> payload;
   final DateTime createdAt;
@@ -30,6 +31,7 @@ class PendingAction {
   PendingAction({
     required this.id,
     required this.table,
+    required this.ownerUserId,
     required this.action,
     required this.payload,
     required this.createdAt,
@@ -41,6 +43,7 @@ class PendingAction {
     return {
       'id': id,
       'table': table,
+      'ownerUserId': ownerUserId,
       'action': action,
       'payload': payload,
       'createdAt': createdAt.toIso8601String(),
@@ -53,6 +56,7 @@ class PendingAction {
     return PendingAction(
       id: json['id'] as String,
       table: json['table'] as String,
+      ownerUserId: json['ownerUserId'] as String,
       action: json['action'] as String,
       payload: json['payload'] as Map<String, dynamic>,
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -199,7 +203,7 @@ class DataSyncService extends ChangeNotifier {
   String get _keyPlans => 'cache_plans_${_gymId ?? "default"}';
   String get _keyMemberships => 'cache_memberships_${_gymId ?? "default"}';
   String get _keyPayments => 'cache_payments_${_gymId ?? "default"}';
-  String get _keyPendingQueue => 'pending_queue_${_gymId ?? "default"}';
+  String get _keyPendingQueue => 'pending_queue_${_userId ?? "unclaimed"}_${_gymId ?? "default"}';
 
   // --- Initialize & Local Loading ---
   Future<void> _loadAllFromLocalCache() async {
@@ -291,6 +295,7 @@ class DataSyncService extends ChangeNotifier {
     queue.add(PendingAction(
       id: const Uuid().v4(),
       table: table,
+      ownerUserId: _userId ?? _supabase.auth.currentUser?.id ?? (throw StateError('لا يمكن حفظ عملية بدون حساب مسجل')),
       action: action,
       payload: payload,
       createdAt: DateTime.now(),
@@ -528,6 +533,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMembers).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('members', 'update', edited.toJson());
       }
@@ -552,6 +559,8 @@ class DataSyncService extends ChangeNotifier {
           'deleted_at': DateTime.now().toIso8601String(),
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('members', 'delete', {'id': id});
       }
@@ -592,6 +601,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMembershipPlans).upsert(newPlan.toJson());
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('plans', 'create', newPlan.toJson());
       }
@@ -617,6 +628,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMembershipPlans).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('plans', 'update', edited.toJson());
       }
@@ -641,6 +654,8 @@ class DataSyncService extends ChangeNotifier {
           'deleted_at': DateTime.now().toIso8601String(),
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('plans', 'delete', {'id': id});
       }
@@ -686,6 +701,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMemberships).upsert(newMembership.toJson());
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('memberships', 'create', newMembership.toJson());
       }
@@ -731,6 +748,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tablePayments).upsert(newPayment.toJson());
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('payments', 'create', newPayment.toJson());
       }
@@ -756,6 +775,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tableMemberships).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('memberships', 'update', edited.toJson());
       }
@@ -781,6 +802,8 @@ class DataSyncService extends ChangeNotifier {
           'deleted_at': now.toIso8601String(),
           'updated_at': now.toIso8601String(),
         }).eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('memberships', 'delete', {'id': id});
       }
@@ -804,6 +827,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tablePayments).update(edited.toJson()).eq('id', edited.id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('payments', 'update', edited.toJson());
       }
@@ -825,6 +850,8 @@ class DataSyncService extends ChangeNotifier {
     if (online) {
       try {
         await _supabase.from(SupabaseConstants.tablePayments).delete().eq('id', id);
+      } on PostgrestException {
+        rethrow;
       } catch (_) {
         await _addToQueue('payments', 'delete', {'id': id});
       }
