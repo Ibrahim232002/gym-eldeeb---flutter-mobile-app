@@ -9,7 +9,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/rtl_support.dart';
 import '../../core/services/data_sync_service.dart';
 import '../../core/services/whatsapp_service.dart';
-import '../../core/services/csv_import_service.dart';
 
 import '../../data/models/member.dart';
 import '../../data/models/membership_plan.dart';
@@ -83,7 +82,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 _buildDrawerItem(2, 'خطط الاشتراكات', Icons.card_membership_rounded, currentTab),
                 _buildDrawerItem(3, 'الاشتراكات الحالية', Icons.sports_gymnastics_rounded, currentTab),
                 _buildDrawerItem(4, 'سجل المدفوعات', Icons.payments_rounded, currentTab),
-                _buildDrawerItem(5, 'استيراد CSV', Icons.file_upload_rounded, currentTab),
                 _buildDrawerItem(6, 'الملف الشخصي والإعدادات', Icons.settings_rounded, currentTab),
               ],
             ),
@@ -188,8 +186,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return 'سجل الاشتراكات الفعالة';
       case 4:
         return 'سجل المدفوعات والإيرادات';
-      case 5:
-        return 'استيراد بيانات الأعضاء';
       case 6:
         return 'الإعدادات والملف الشخصي';
       default:
@@ -209,8 +205,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return const _MembershipsTab();
       case 4:
         return const _PaymentsTab();
-      case 5:
-        return const _CsvImportTab();
       case 6:
         return const _SettingsTab();
       default:
@@ -2740,189 +2734,6 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
             onPressed: _isSaving ? null : _handleSave,
             child: _isSaving ? const CircularProgressIndicator() : const Text('تسجيل الدفعة'),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================
-// --- TAB 5: CSV IMPORT WORKSTATION ---
-// ==========================================
-class _CsvImportTab extends ConsumerStatefulWidget {
-  const _CsvImportTab();
-
-  @override
-  ConsumerState<_CsvImportTab> createState() => _CsvImportTabState();
-}
-
-class _CsvImportTabState extends ConsumerState<_CsvImportTab> {
-  List<ParsedImportRow> _parsedRows = [];
-  bool _isLoading = false;
-  String? _fileName;
-
-  void _pickAndParse() async {
-    setState(() => _isLoading = true);
-    try {
-      final rows = await ref.read(csvImportServiceProvider).pickAndParseCsv();
-      setState(() {
-        _parsedRows = rows;
-        _fileName = 'كشف_الأعضاء.csv';
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString(), textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _triggerImport() async {
-    if (_parsedRows.isEmpty) return;
-    setState(() => _isLoading = true);
-
-    final auth = ref.read(authNotifierProvider);
-    final gymId = auth.gym?.id ?? auth.profile?.gymId;
-    final importedBy = auth.profile?.id;
-
-    if (gymId == null) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('معرف الجيم غير متوفر')));
-      return;
-    }
-
-    try {
-      final results = await ref.read(csvImportServiceProvider).executeImport(
-            gymId: gymId,
-            fileName: _fileName ?? 'import_csv.csv',
-            rowsToImport: _parsedRows,
-            importedBy: importedBy,
-          );
-
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => Directionality(
-          textDirection: ui.TextDirection.rtl,
-          child: AlertDialog(
-            backgroundColor: AppColors.surfaceCard,
-            title: const Text('اكتمل الاستيراد بنجاح!'),
-            content: Text(
-              'إجمالي السطور المعالجة: ${results['total']}\n'
-              'تم استيراد بنجاح: ${results['imported']} أعضاء\n'
-              'فشل: ${results['failed']}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  setState(() {
-                    _parsedRows = [];
-                    _fileName = null;
-                  });
-                  ref.read(selectedTabProvider.notifier).state = 1; // View members
-                },
-                child: const Text('رؤية الأعضاء الجدد'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString(), textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'استيراد بيانات الأعضاء',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'اختار ملف الأعضاء من جهازك، وراجع البيانات قبل إضافتها.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 20),
-
-          if (_parsedRows.isEmpty) ...[
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: AppColors.primary.withOpacity(0.12),
-                      child: const Icon(Icons.file_copy_rounded, color: AppColors.primary, size: 36),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _pickAndParse,
-                      icon: const Icon(Icons.file_upload_rounded),
-                      label: _isLoading
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Color(0xFF0F141C))))
-                          : const Text('اختيار ملف الأعضاء'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ] else ...[
-            Text('معاينة السطور الجاهزة للاستيراد (${_parsedRows.length} سطر):', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _parsedRows.length,
-                itemBuilder: (context, index) {
-                  final row = _parsedRows[index];
-                  final isInvalid = row.status == 'invalid';
-                  return Card(
-                    color: isInvalid ? AppColors.error.withOpacity(0.08) : AppColors.surface,
-                    child: ListTile(
-                      title: Text(row.fullName ?? 'بدون اسم', style: TextStyle(fontWeight: FontWeight.bold, color: isInvalid ? AppColors.error : AppColors.textPrimary)),
-                      subtitle: Text('تليفون: ${row.phone ?? "غير محدد"} • انضمام: ${row.joinDate != null ? DateFormat('yyyy/MM/dd').format(row.joinDate!) : "اليوم"}', style: const TextStyle(fontSize: 11)),
-                      trailing: isInvalid
-                          ? const Icon(Icons.error_outline_rounded, color: AppColors.error)
-                          : const Icon(Icons.check_circle_outline_rounded, color: AppColors.success),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => setState(() => _parsedRows = []),
-                    child: const Text('إلغاء واختيار ملف آخر'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _triggerImport,
-                    child: _isLoading ? const CircularProgressIndicator() : const Text('استيراد الأعضاء'),
-                  ),
-                ),
-              ],
-            )
-          ],
         ],
       ),
     );
