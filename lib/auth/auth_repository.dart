@@ -61,8 +61,11 @@ class AuthRepository {
       throw Exception(_mapAuthExceptionToArabic(e));
     } catch (e) {
       final msg = e.toString().toLowerCase();
-      if (msg.contains('socket') || msg.contains('network') || msg.contains('clientexception')) {
-        throw Exception('تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
+      if (msg.contains('socket') ||
+          msg.contains('network') ||
+          msg.contains('clientexception')) {
+        throw Exception(
+            'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
       }
       throw Exception('فشل تسجيل الدخول، يرجى المحاولة لاحقاً');
     }
@@ -110,7 +113,8 @@ class AuthRepository {
     } catch (e) {
       final msg = e.toString().toLowerCase();
       if (msg.contains('socket') || msg.contains('network')) {
-        throw Exception('تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
+        throw Exception(
+            'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
       }
       throw Exception('فشل إنشاء الحساب، يرجى المحاولة مرة أخرى');
     }
@@ -231,7 +235,8 @@ class AuthRepository {
     );
 
     if (response.status != 200) {
-      String errorMessage = 'تعذر الانضمام للجيم، يرجى التحقق من صحة رمز الدعوة';
+      String errorMessage =
+          'تعذر الانضمام للجيم، يرجى التحقق من صحة رمز الدعوة';
       if (response.data is Map) {
         final data = response.data as Map<String, dynamic>;
         if (data['error'] != null) {
@@ -241,7 +246,9 @@ class AuthRepository {
             errorMessage = 'رمز الدعوة غير صحيح أو غير موجود';
           } else if (lower.contains('expire')) {
             errorMessage = 'رمز الدعوة منتهي الصلاحية';
-          } else if (lower.contains('max') || lower.contains('limit') || lower.contains('used')) {
+          } else if (lower.contains('max') ||
+              lower.contains('limit') ||
+              lower.contains('used')) {
             errorMessage = 'تم استنفاد الحد الأقصى لاستخدام رمز الدعوة هذا';
           } else if (lower.contains('already')) {
             errorMessage = 'هذا الحساب مرتبط بالفعل بصالة جيم';
@@ -277,12 +284,15 @@ class AuthRepository {
     if (message.contains('password') && message.contains('least')) {
       return 'كلمة المرور يجب أن لا تقل عن 6 أحرف';
     }
-    if (message.contains('rate limit') || message.contains('too many requests')) {
+    if (message.contains('rate limit') ||
+        message.contains('too many requests')) {
       return 'تم تجاوز الحد المسموح من المحاولات، يرجى الانتظار قليلاً';
     }
     if (message.contains('network') || message.contains('connection')) {
       return 'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت';
     }
-    return e.message.isNotEmpty ? e.message : 'حدث خطأ أثناء المصادقة، يرجى المحاولة لاحقاً';
+    return e.message.isNotEmpty
+        ? e.message
+        : 'حدث خطأ أثناء المصادقة، يرجى المحاولة لاحقاً';
   }
 }

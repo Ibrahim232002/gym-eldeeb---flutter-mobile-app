@@ -53,13 +53,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (success) {
       // Newly registered users have no gym and proceed directly to Join Gym
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
             'تم إنشاء الحساب بنجاح! أدخل رمز الدعوة للانضمام لصالة الجيم.',
             textDirection: TextDirection.rtl,
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: AppColors.success,
+          backgroundColor: context.appPalette.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -76,7 +76,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             textDirection: TextDirection.rtl,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: AppColors.error,
+          backgroundColor: context.appPalette.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -122,14 +122,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.15),
+                        color: context.appPalette.error.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.error.withOpacity(0.4)),
+                        border: Border.all(
+                            color: context.appPalette.error
+                                .withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded,
-                              color: AppColors.error, size: 20),
+                          Icon(Icons.error_outline_rounded,
+                              color: context.appPalette.error, size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -199,7 +201,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         _obscurePassword
                             ? Icons.visibility_off_outlined
                             : Icons.visibility_outlined,
-                        color: AppColors.textMuted,
+                        color: context.appPalette.textMuted,
                       ),
                       onPressed: () {
                         setState(() {
@@ -232,7 +234,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         _obscureConfirmPassword
                             ? Icons.visibility_off_outlined
                             : Icons.visibility_outlined,
-                        color: AppColors.textMuted,
+                        color: context.appPalette.textMuted,
                       ),
                       onPressed: () {
                         setState(() {
@@ -265,16 +267,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
+                      Text(
                         'لديك حساب بالفعل؟',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style:
+                            TextStyle(color: context.appPalette.textSecondary),
                       ),
                       TextButton(
                         onPressed: isLoading ? null : () => context.pop(),
-                        child: const Text(
+                        child: Text(
                           'تسجيل الدخول',
                           style: TextStyle(
-                            color: AppColors.primary,
+                            color: context.appPalette.primary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

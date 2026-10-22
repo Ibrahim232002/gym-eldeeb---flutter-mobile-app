@@ -24,6 +24,8 @@ class MembershipPlan {
     this.syncVersion = 1,
   });
 
+  bool get isSelectableForNewMembership => isActive && deletedAt == null;
+
   factory MembershipPlan.fromJson(Map<String, dynamic> json) {
     return MembershipPlan(
       id: json['id'] as String,
@@ -85,4 +87,25 @@ class MembershipPlan {
       syncVersion: syncVersion ?? this.syncVersion,
     );
   }
+
+  DateTime endDateFor(DateTime startDate) {
+    return endDateForDuration(startDate, durationDays);
+  }
+
+  static DateTime endDateForDuration(DateTime startDate, int durationDays) {
+    if (durationDays <= 0) {
+      throw ArgumentError.value(
+        durationDays,
+        'durationDays',
+        'يجب أن تكون مدة الباقة يوماً واحداً على الأقل.',
+      );
+    }
+    return DateTime.utc(startDate.year, startDate.month, startDate.day)
+        .add(Duration(days: durationDays - 1));
+  }
 }
+
+List<MembershipPlan> selectableMembershipPlans(
+  Iterable<MembershipPlan> plans,
+) =>
+    plans.where((plan) => plan.isSelectableForNewMembership).toList();

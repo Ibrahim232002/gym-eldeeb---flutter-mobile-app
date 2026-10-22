@@ -18,7 +18,6 @@ import {
   Users,
   CreditCard,
   Calendar,
-  FileSpreadsheet,
   ArrowRight,
   LogOut,
   Copy,
@@ -38,7 +37,6 @@ import {
   Trash2,
   Edit3,
   Plus,
-  UploadCloud,
   CheckCircle,
   Settings,
   Globe,
@@ -189,7 +187,7 @@ export default function App() {
   const [gym, setGym] = useState<{ id: string; name: string; currency: string; phone?: string | null } | null>(null);
 
   // Sub-tab navigation inside Dashboard
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'members' | 'plans' | 'memberships' | 'payments' | 'import' | 'settings'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'members' | 'plans' | 'memberships' | 'payments' | 'settings'>('overview');
 
   // Real Database Lists
   const [realMembers, setRealMembers] = useState<any[]>([]);
@@ -250,12 +248,6 @@ export default function App() {
   });
   const [memPrice, setMemPrice] = useState('350');
   const [memRecordPayment, setMemRecordPayment] = useState(true);
-
-  // CSV Import State
-  const [csvParsedRows, setCsvParsedRows] = useState<any[]>([]);
-  const [csvFileName, setCsvFileName] = useState('');
-  const [isCsvImporting, setIsCsvImporting] = useState(false);
-  const [csvSuccessMessage, setCsvSuccessMessage] = useState<string | null>(null);
 
   // Global Toast
   const [globalToast, setGlobalToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -918,121 +910,6 @@ export default function App() {
       setTimeout(() => setGlobalToast(null), 3000);
     } finally {
       setIsModalSaving(false);
-    }
-  };
-
-  // CSV Parsing
-  const handleCsvFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      parseCsvString(text, file.name);
-    };
-    reader.readAsText(file);
-  };
-
-  const parseCsvString = (text: string, fileName: string = 'import.csv') => {
-    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-    if (lines.length <= 1) {
-      setGlobalToast({ type: 'error', message: 'الملف فارغ أو لا يحتوي على صفوف بيانات صالحة' });
-      setTimeout(() => setGlobalToast(null), 3000);
-      return;
-    }
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-      const rowObj: any = {
-        rowNumber: i,
-        fullName: cols[0] || '',
-        phone: cols[1] || '',
-        joinDate: cols[2] || new Date().toISOString().substring(0, 10),
-        amount: cols[3] ? parseFloat(cols[3]) : 0,
-        isValid: Boolean(cols[0] && cols[0].length >= 2),
-      };
-      rows.push(rowObj);
-    }
-    setCsvParsedRows(rows);
-    setCsvFileName(fileName);
-  };
-
-  const handleExecuteCsvImport = async () => {
-    if (csvParsedRows.length === 0) return;
-    setIsCsvImporting(true);
-    try {
-      const gymId = profile?.gym_id || gym?.id || 'd0000000-0000-0000-0000-000000000001';
-      const batchId = crypto.randomUUID();
-
-      if (isOnline) {
-        await supabase.from('import_batches').insert({
-          id: batchId,
-          gym_id: gymId,
-          source_type: 'csv',
-          file_name: csvFileName,
-          total_rows: csvParsedRows.length,
-          imported_rows: csvParsedRows.filter(r => r.isValid).length,
-          failed_rows: csvParsedRows.filter(r => !r.isValid).length,
-          status: 'completed',
-          imported_by: currentUser?.id || session?.user?.id || null,
-        });
-      }
-
-      const newMembersToAdd: any[] = [];
-      const newPaymentsToAdd: any[] = [];
-
-      for (const row of csvParsedRows) {
-        if (!row.isValid) continue;
-        const memberId = crypto.randomUUID();
-        const member = {
-          id: memberId,
-          gym_id: gymId,
-          full_name: row.fullName,
-          phone: row.phone || null,
-          join_date: row.joinDate,
-          is_active: true,
-          created_by: currentUser?.id || session?.user?.id || null,
-          sync_version: 1,
-        };
-        newMembersToAdd.push(member);
-
-        if (row.amount > 0) {
-          newPaymentsToAdd.push({
-            id: crypto.randomUUID(),
-            gym_id: gymId,
-            amount: row.amount,
-            payment_method: 'cash',
-            paid_at: new Date().toISOString(),
-            notes: `استيراد أولي: ${row.fullName}`,
-            recorded_by: currentUser?.id || session?.user?.id || null,
-            sync_version: 1,
-          });
-        }
-      }
-
-      if (isOnline && newMembersToAdd.length > 0) {
-        await supabase.from('members').insert(newMembersToAdd);
-        if (newPaymentsToAdd.length > 0) {
-          await supabase.from('payments').insert(newPaymentsToAdd);
-        }
-      }
-
-      setRealMembers(prev => [...newMembersToAdd, ...prev]);
-      if (newPaymentsToAdd.length > 0) {
-        setRealPayments(prev => [...newPaymentsToAdd, ...prev]);
-      }
-
-      setCsvSuccessMessage(`تم استيراد ${newMembersToAdd.length} عضو بنجاح!`);
-      setCsvParsedRows([]);
-      setGlobalToast({ type: 'success', message: `تم استيراد ${newMembersToAdd.length} عضو بنجاح إلى جيم الديب!` });
-      setTimeout(() => {
-        setCsvSuccessMessage(null);
-        setDashboardTab('members');
-      }, 1500);
-    } catch (err: any) {
-      alert('حدث خطأ أثناء الاستيراد: ' + err?.message);
-    } finally {
-      setIsCsvImporting(false);
     }
   };
 
@@ -2149,7 +2026,7 @@ export default function App() {
                               </button>
 
                               {/* 3 Sleek Secondary Quick Action Tiles */}
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-2 gap-2">
                                 <button
                                   onClick={() => setShowAddPaymentModal(true)}
                                   className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 btn-tactile ${
@@ -2182,19 +2059,6 @@ export default function App() {
                                   <span className="text-[11px] font-bold">اشتراك جديد</span>
                                 </button>
 
-                                <button
-                                  onClick={() => setDashboardTab('import')}
-                                  className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 btn-tactile ${
-                                    isDark
-                                      ? 'bg-[#0E1524] hover:bg-[#151F33] border-[#1E2B45] text-slate-200'
-                                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800 shadow-2xs'
-                                  }`}
-                                >
-                                  <div className="w-7 h-7 rounded-lg bg-purple-500/15 text-purple-400 flex items-center justify-center">
-                                    <FileSpreadsheet className="w-4 h-4" />
-                                  </div>
-                                  <span className="text-[11px] font-bold">استيراد CSV</span>
-                                </button>
                               </div>
                             </div>
 
@@ -2793,108 +2657,6 @@ export default function App() {
                                   </div>
                                 </div>
                               ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* SUB-VIEW 5: IMPORT CSV */}
-                      {dashboardTab === 'import' && (
-                        <div className="space-y-3">
-                          <div className={`p-3.5 rounded-xl border space-y-2.5 transition ${
-                            isDark ? 'bg-[#0F1626] border-[#1E2B45]' : 'bg-white border-slate-200 shadow-2xs'
-                          }`}>
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-purple-400">مركز استيراد كشوف الأعضاء (CSV)</span>
-                              <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>جيم الديب</span>
-                            </div>
-                            <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                              ارفع ملف CSV لإدخال سجلات الأعضاء القدامى دفعة واحدة لجدولي <code className="text-[#D4AF37] font-mono">import_batches</code> و <code className="text-[#D4AF37] font-mono">members</code>.
-                            </p>
-
-                            <div className="flex flex-col gap-2">
-                              <label className={`flex flex-col items-center justify-center p-3 border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 rounded-xl cursor-pointer bg-purple-500/5 transition btn-tactile`}>
-                                <UploadCloud className="w-6 h-6 text-purple-400 mb-1" />
-                                <span className="text-xs text-purple-400 font-bold">
-                                  {csvFileName ? `الملف: ${csvFileName}` : 'اضغط لاختيار ملف CSV من جهازك'}
-                                </span>
-                                <span className={`text-[9px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>يدعم تنسيق UTF-8 مع الاسم والهاتف</span>
-                                <input
-                                  type="file"
-                                  accept=".csv"
-                                  onChange={handleCsvFileUpload}
-                                  className="hidden"
-                                />
-                              </label>
-
-                              <button
-                                onClick={() => {
-                                  const demoCsv = `الاسم,الهاتف,التاريخ,المبلغ\nكابتن محمود نصر,01012349999,2026-03-01,350\nكابتن طارق العوضي,01198765432,2026-03-05,400\nكابتن مصطفى الديب,01234567890,2026-03-10,350`;
-                                  parseCsvString(demoCsv, 'كشف_تجريبي_جيم_الديب.csv');
-                                }}
-                                className={`w-full text-xs py-2 rounded-xl border font-bold transition flex items-center justify-center gap-1.5 btn-tactile ${
-                                  isDark ? 'bg-[#162032] hover:bg-[#1E2B45] text-slate-200 border-[#1E2B45]' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200'
-                                }`}
-                              >
-                                <span>📄 تحميل وفحص كشف نموذجي جاهز للاختبار</span>
-                              </button>
-                            </div>
-
-                            {csvSuccessMessage && (
-                              <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center">
-                                {csvSuccessMessage}
-                              </div>
-                            )}
-
-                            {csvParsedRows.length > 0 && (
-                              <div className={`space-y-2 pt-1 border-t ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                    معاينة الصفوف المقروءة ({csvParsedRows.length})
-                                  </span>
-                                  <span className="text-[10px] text-emerald-400 font-bold">
-                                    {csvParsedRows.filter(r => r.isValid).length} صالح للاستيراد
-                                  </span>
-                                </div>
-
-                                <div className="space-y-1 max-h-[160px] overflow-y-auto">
-                                  {csvParsedRows.map(row => (
-                                    <div
-                                      key={row.rowNumber}
-                                      className={`p-2 rounded-lg border text-[11px] flex items-center justify-between ${
-                                        row.isValid
-                                          ? isDark ? 'bg-[#080C14] border-[#1E2B45]' : 'bg-slate-50 border-slate-200'
-                                          : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                                      }`}
-                                    >
-                                      <div>
-                                        <div className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{row.fullName || 'بدون اسم'}</div>
-                                        <div className={`text-[9px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                          {row.phone || 'بدون هاتف'} • تاريخ: {row.joinDate}
-                                        </div>
-                                      </div>
-                                      <div className="text-right">
-                                        <span className="text-[#D4AF37] font-bold font-mono tabular-nums">{row.amount} ج.م</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                <button
-                                  onClick={handleExecuteCsvImport}
-                                  disabled={isCsvImporting || csvParsedRows.filter(r => r.isValid).length === 0}
-                                  className="w-full bg-purple-500 hover:bg-purple-400 text-slate-950 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-500/20 disabled:opacity-50 transition btn-tactile"
-                                >
-                                  {isCsvImporting ? (
-                                    <span>جاري كتابة الأعضاء في Supabase...</span>
-                                  ) : (
-                                    <>
-                                      <CheckCircle className="w-3.5 h-3.5" />
-                                      <span>تأكيد استيراد {csvParsedRows.filter(r => r.isValid).length} عضو إلى قاعدة البيانات</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
                             )}
                           </div>
                         </div>

@@ -22,14 +22,17 @@ class BrandLogo extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [AppColors.primary, AppColors.primaryDark],
+            gradient: LinearGradient(
+              colors: [
+                context.appPalette.primary,
+                context.appPalette.primaryDark
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.35),
+                color: context.appPalette.primary.withValues(alpha: 0.35),
                 blurRadius: 24,
                 spreadRadius: 2,
                 offset: const Offset(0, 8),
@@ -50,7 +53,7 @@ class BrandLogo extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary,
+                color: context.appPalette.textPrimary,
                 letterSpacing: 0.5,
               ),
         ),
@@ -60,7 +63,7 @@ class BrandLogo extends StatelessWidget {
             'GYM ELDEEB • نظام إدارة الصالة الرياضية',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.primaryLight,
+                  color: context.appPalette.primaryLight,
                   fontWeight: FontWeight.w600,
                   fontSize: 11,
                   letterSpacing: 1.2,

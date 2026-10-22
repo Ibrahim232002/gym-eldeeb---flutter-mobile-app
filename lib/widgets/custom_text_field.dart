@@ -35,8 +35,8 @@ class CustomTextField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: context.appPalette.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -49,15 +49,16 @@ class CustomTextField extends StatelessWidget {
           validator: validator,
           onChanged: onChanged,
           readOnly: readOnly,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: context.appPalette.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w500,
           ),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon != null
-                ? Icon(prefixIcon, color: AppColors.textMuted, size: 20)
+                ? Icon(prefixIcon,
+                    color: context.appPalette.textMuted, size: 20)
                 : null,
             suffixIcon: suffixIcon,
           ),

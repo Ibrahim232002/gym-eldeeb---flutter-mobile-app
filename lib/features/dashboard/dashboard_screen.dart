@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:ui' as ui;
 
 import '../../auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme_controller.dart';
 import '../../core/utils/rtl_support.dart';
 import '../../core/services/data_sync_service.dart';
 import '../../core/services/whatsapp_service.dart';
@@ -23,6 +25,97 @@ final selectedTabProvider = StateProvider<int>((ref) => 0);
 /// Filter selection for members tab
 final memberFilterProvider = StateProvider<String>((ref) => 'all');
 
+String _memberInitial(String fullName) {
+  final trimmedName = fullName.trim();
+  return trimmedName.isEmpty ? '؟' : trimmedName[0];
+}
+
+Future<void> _saveTheme(
+  BuildContext context,
+  WidgetRef ref,
+  AppThemeVariant? variant,
+) async {
+  if (variant == null) return;
+  try {
+    await ref.read(appThemeProvider.notifier).setTheme(variant);
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تعذر حفظ المظهر: $error'),
+        backgroundColor: context.appPalette.error,
+      ),
+    );
+  }
+}
+
+String _normalizeSearchDigits(String value) {
+  return String.fromCharCodes(value.runes.map((rune) {
+    if (rune >= 0x0660 && rune <= 0x0669) return rune - 0x0660 + 0x30;
+    if (rune >= 0x06F0 && rune <= 0x06F9) return rune - 0x06F0 + 0x30;
+    return rune;
+  })).toLowerCase();
+}
+
+bool memberMatchesSearch(Member member, String query) {
+  final normalizedQuery = _normalizeSearchDigits(query.trim());
+  if (normalizedQuery.isEmpty) return true;
+  final normalizedName = _normalizeSearchDigits(member.fullName);
+  final phoneQuery = normalizedQuery.replaceAll(RegExp(r'[^0-9]'), '');
+  final phone = _normalizeSearchDigits(member.phone ?? '')
+      .replaceAll(RegExp(r'[^0-9]'), '');
+  return normalizedName.contains(normalizedQuery) ||
+      (phoneQuery.isNotEmpty && phone.contains(phoneQuery));
+}
+
+class DashboardQuickActions extends StatelessWidget {
+  final VoidCallback onAddMember;
+  final VoidCallback onNewSubscription;
+  final VoidCallback onRecordPayment;
+
+  const DashboardQuickActions({
+    super.key,
+    required this.onAddMember,
+    required this.onNewSubscription,
+    required this.onRecordPayment,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: onAddMember,
+            icon: const Icon(Icons.person_add_rounded, size: 18),
+            label: const Text('إضافة عضو'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onNewSubscription,
+            icon: const Icon(Icons.card_membership_rounded, size: 18),
+            label: const Text('اشتراك جديد'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onRecordPayment,
+            icon: const Icon(Icons.payment_rounded, size: 18),
+            label: const Text('تسجيل دفعة'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Production interactive Dashboard Screen for Gym ElDeeb (جيم الديب)
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -39,24 +132,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final currentTab = ref.watch(selectedTabProvider);
     final syncService = ref.watch(dataSyncServiceProvider);
     final profile = ref.watch(currentProfileProvider);
-    final isOwner = profile?.isOwner ?? false;
 
     final drawerWidget = Drawer(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appPalette.background,
       child: Column(
         children: [
           UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.surfaceCard, AppColors.background],
+                colors: [
+                  context.appPalette.surfaceCard,
+                  context.appPalette.background
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
             ),
             currentAccountPicture: CircleAvatar(
-              backgroundColor: AppColors.primary,
+              backgroundColor: context.appPalette.primary,
               child: Text(
-                profile?.fullName.isNotEmpty == true ? profile!.fullName[0] : 'د',
+                _memberInitial(profile?.fullName ?? 'د'),
                 style: const TextStyle(
                   color: Color(0xFF0F141C),
                   fontWeight: FontWeight.w900,
@@ -65,31 +160,48 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
             accountName: Text(
-              profile?.fullName.isNotEmpty == true ? profile!.fullName : 'كابتن جيم الديب',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              profile?.fullName.isNotEmpty == true
+                  ? profile!.fullName
+                  : 'كابتن جيم الديب',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: context.appPalette.textPrimary),
             ),
             accountEmail: Text(
-              isOwner ? 'مالك الصالة الرياضية (Owner)' : 'مدرب معتمد (Coach)',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              'فريق جيم الديب',
+              style: TextStyle(
+                  color: context.appPalette.textSecondary, fontSize: 12),
             ),
           ),
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                _buildDrawerItem(0, 'الرئيسية والإحصائيات', Icons.dashboard_rounded, currentTab),
-                _buildDrawerItem(1, 'إدارة الأعضاء', Icons.people_alt_rounded, currentTab),
-                _buildDrawerItem(2, 'خطط الاشتراكات', Icons.card_membership_rounded, currentTab),
-                _buildDrawerItem(3, 'الاشتراكات الحالية', Icons.sports_gymnastics_rounded, currentTab),
-                _buildDrawerItem(4, 'سجل المدفوعات', Icons.payments_rounded, currentTab),
-                _buildDrawerItem(6, 'الملف الشخصي والإعدادات', Icons.settings_rounded, currentTab),
+                _buildDrawerItem(0, 'الرئيسية والإحصائيات',
+                    Icons.dashboard_rounded, currentTab),
+                _buildDrawerItem(
+                    1, 'إدارة الأعضاء', Icons.people_alt_rounded, currentTab),
+                _buildDrawerItem(2, 'خطط الاشتراكات',
+                    Icons.card_membership_rounded, currentTab),
+                _buildDrawerItem(3, 'الاشتراكات الحالية',
+                    Icons.sports_gymnastics_rounded, currentTab),
+                _buildDrawerItem(7, 'اشتراكات قاربت على الانتهاء',
+                    Icons.alarm_rounded, currentTab),
+                _buildDrawerItem(
+                    4, 'سجل المدفوعات', Icons.payments_rounded, currentTab),
+                _buildDrawerItem(6, 'الملف الشخصي والإعدادات',
+                    Icons.settings_rounded, currentTab),
               ],
             ),
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout_rounded, color: AppColors.error),
-            title: const Text('تسجيل الخروج', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+            leading:
+                Icon(Icons.logout_rounded, color: context.appPalette.error),
+            title: Text('تسجيل الخروج',
+                style: TextStyle(
+                    color: context.appPalette.error,
+                    fontWeight: FontWeight.bold)),
             onTap: () => _confirmLogout(context),
           ),
           const SizedBox(height: 20),
@@ -108,26 +220,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         actions: [
           if (syncService.isOffline)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 8.0),
               child: Row(
                 children: [
-                  Icon(Icons.wifi_off_rounded, color: AppColors.error, size: 18),
+                  Icon(Icons.wifi_off_rounded,
+                      color: context.appPalette.error, size: 18),
                   SizedBox(width: 4),
-                  Text('أوفلاين', style: TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text('أوفلاين',
+                      style: TextStyle(
+                          color: context.appPalette.error,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
           IconButton(
             icon: syncService.syncStatus == SyncStatus.syncing
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(AppColors.primary)),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation(context.appPalette.primary)),
                   )
                 : const Icon(Icons.sync_rounded),
             tooltip: 'تحديث البيانات',
-            onPressed: syncService.syncStatus == SyncStatus.syncing ? null : () => syncService.syncAll(),
+            onPressed: syncService.syncStatus == SyncStatus.syncing
+                ? null
+                : () => syncService.syncAll(),
           ),
         ],
       ),
@@ -135,34 +257,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         textDirection: ui.TextDirection.rtl,
         child: _buildBody(currentTab),
       ),
-      floatingActionButton: _buildFloatingActionButton(context, ref, currentTab),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentTab > 3 ? 0 : currentTab,
         onTap: (index) {
           ref.read(selectedTabProvider.notifier).state = index;
         },
-        backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
+        backgroundColor: context.appPalette.surface,
+        selectedItemColor: context.appPalette.primary,
+        unselectedItemColor: context.appPalette.textMuted,
         type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_alt_rounded), label: 'الأعضاء'),
-          BottomNavigationBarItem(icon: Icon(Icons.card_membership_rounded), label: 'الخطط'),
-          BottomNavigationBarItem(icon: Icon(Icons.sports_gymnastics_rounded), label: 'الاشتراكات'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.people_alt_rounded), label: 'الأعضاء'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.card_membership_rounded), label: 'الخطط'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.sports_gymnastics_rounded), label: 'الاشتراكات'),
         ],
       ),
     );
   }
 
-  Widget _buildDrawerItem(int tabIndex, String label, IconData icon, int currentTab) {
+  Widget _buildDrawerItem(
+      int tabIndex, String label, IconData icon, int currentTab) {
     final isSelected = tabIndex == currentTab;
     return ListTile(
-      leading: Icon(icon, color: isSelected ? AppColors.primary : AppColors.textSecondary),
+      leading: Icon(icon,
+          color: isSelected
+              ? context.appPalette.primary
+              : context.appPalette.textSecondary),
       title: Text(
         label,
         style: TextStyle(
-          color: isSelected ? AppColors.primary : AppColors.textPrimary,
+          color: isSelected
+              ? context.appPalette.primary
+              : context.appPalette.textPrimary,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
@@ -188,6 +319,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return 'سجل المدفوعات والإيرادات';
       case 6:
         return 'الإعدادات والملف الشخصي';
+      case 7:
+        return 'اشتراكات قاربت على الانتهاء';
       default:
         return 'جيم الديب';
     }
@@ -207,6 +340,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return const _PaymentsTab();
       case 6:
         return const _SettingsTab();
+      case 7:
+        return const _ExpiringMembershipsTab();
       default:
         return const Center(child: Text('جيم الديب'));
     }
@@ -218,88 +353,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تسجيل الخروج'),
-          content: const Text('هل أنت متأكد من رغبتك في تسجيل الخروج من جيم الديب؟'),
+          content:
+              const Text('هل أنت متأكد من رغبتك في تسجيل الخروج من جيم الديب؟'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('إلغاء'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
                 await ref.read(authNotifierProvider.notifier).signOut();
                 if (context.mounted) context.go('/login');
               },
-              child: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white)),
+              child: const Text('تسجيل الخروج',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Widget? _buildFloatingActionButton(BuildContext context, WidgetRef ref, int currentTab) {
-    if (currentTab == 0 || currentTab == 1) {
-      return FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: const Color(0xFF0F141C),
-        icon: const Icon(Icons.person_add_rounded),
-        label: const Text('إضافة عضو جديد', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: () {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const _AddMemberDialog(),
-          );
-        },
-      );
-    } else if (currentTab == 2) {
-      return FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: const Color(0xFF0F141C),
-        icon: const Icon(Icons.playlist_add_rounded),
-        label: const Text('إضافة باقة جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: () {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const _AddPlanDialog(),
-          );
-        },
-      );
-    } else if (currentTab == 3) {
-      return FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: const Color(0xFF0F141C),
-        icon: const Icon(Icons.card_membership_rounded),
-        label: const Text('تسجيل اشتراك جديد', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: () {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const _AddMembershipDialog(),
-          );
-        },
-      );
-    } else if (currentTab == 4) {
-      return FloatingActionButton.extended(
-        backgroundColor: AppColors.success,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.payment_rounded),
-        label: const Text('تسجيل إيصال دفع', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: () {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const _AddPaymentDialog(),
-          );
-        },
-      );
-    }
-    return null;
   }
 }
 
@@ -318,17 +395,16 @@ class _DashboardOverviewTab extends ConsumerWidget {
     final inactiveMembers = totalMembers - activeMembers;
 
     final now = DateTime.now();
-    final sevenDaysFromNow = now.add(const Duration(days: 7));
-    final expiringSoon = data.memberships.where((m) {
-      return m.endDate.isAfter(now) && m.endDate.isBefore(sevenDaysFromNow);
-    }).length;
+    final expiringSoonMemberships =
+        expiringMembershipsWithinDays(data.memberships, now);
 
     final today = DateTime(now.year, now.month, now.day);
     final todayPayments = data.payments.where((p) {
       final payDate = DateTime(p.paidAt.year, p.paidAt.month, p.paidAt.day);
       return payDate.isAtSameMomentAs(today);
     }).toList();
-    final todayRevenue = todayPayments.fold<double>(0, (sum, p) => sum + p.amount);
+    final todayRevenue =
+        todayPayments.fold<double>(0, (sum, p) => sum + p.amount);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -340,18 +416,21 @@ class _DashboardOverviewTab extends ConsumerWidget {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: context.appPalette.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(
+                    color: context.appPalette.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppColors.error),
-                  const SizedBox(width: 10),
+                  Icon(Icons.warning_amber_rounded,
+                      color: context.appPalette.error),
+                  SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'فيه بيانات لسه متسجلتش على الحساب. هنحاول تاني لما الاتصال يستقر.',
-                      style: const TextStyle(color: AppColors.error, fontSize: 13),
+                      style: TextStyle(
+                          color: context.appPalette.error, fontSize: 13),
                     ),
                   ),
                 ],
@@ -367,42 +446,46 @@ class _DashboardOverviewTab extends ConsumerWidget {
             childAspectRatio: 1.35,
             children: [
               _buildClickableStatCard(
+                context: context,
                 label: 'إجمالي المشتركين',
                 value: '$totalMembers',
                 icon: Icons.people_rounded,
-                color: AppColors.primary,
+                color: context.appPalette.primary,
                 onTap: () {
                   ref.read(memberFilterProvider.notifier).state = 'all';
                   ref.read(selectedTabProvider.notifier).state = 1;
                 },
               ),
               _buildClickableStatCard(
+                context: context,
                 label: 'المشتركون النشطون',
                 value: '$activeMembers',
                 icon: Icons.check_circle_outline_rounded,
-                color: AppColors.success,
+                color: context.appPalette.success,
                 onTap: () {
                   ref.read(memberFilterProvider.notifier).state = 'active';
                   ref.read(selectedTabProvider.notifier).state = 1;
                 },
               ),
               _buildClickableStatCard(
+                context: context,
                 label: 'غير النشطين',
                 value: '$inactiveMembers',
                 icon: Icons.cancel_outlined,
-                color: AppColors.textMuted,
+                color: context.appPalette.textMuted,
                 onTap: () {
                   ref.read(memberFilterProvider.notifier).state = 'inactive';
                   ref.read(selectedTabProvider.notifier).state = 1;
                 },
               ),
               _buildClickableStatCard(
+                context: context,
                 label: 'ينتهي قريباً (٧ أيام)',
-                value: '$expiringSoon',
+                value: '${expiringSoonMemberships.length}',
                 icon: Icons.alarm_rounded,
-                color: AppColors.warning,
+                color: context.appPalette.warning,
                 onTap: () {
-                  ref.read(selectedTabProvider.notifier).state = 3;
+                  ref.read(selectedTabProvider.notifier).state = 7;
                 },
               ),
             ],
@@ -411,73 +494,63 @@ class _DashboardOverviewTab extends ConsumerWidget {
 
           // Quick Actions Card
           Card(
-            color: AppColors.surfaceCard,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            color: context.appPalette.surfaceCard,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Row(
                     children: [
-                      Text('إجراءات سريعة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary)),
-                      Text('جيم الديب', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(
+                          'إجراءات سريعة',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: context.appPalette.textPrimary),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'جيم الديب',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: context.appPalette.primary,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ElevatedButton.icon(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (_) => const _AddMemberDialog(),
-                            );
-                          },
-                          icon: const Icon(Icons.person_add_rounded, size: 16),
-                          label: const Text('إضافة عضو', style: TextStyle(fontSize: 12)),
-                        ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (_) => const _AddMembershipDialog(),
-                            );
-                          },
-                          icon: const Icon(Icons.card_membership_rounded, size: 16),
-                          label: const Text('اشتراك جديد', style: TextStyle(fontSize: 12)),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      OutlinedButton.icon(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (_) => const _AddPaymentDialog(),
-                            );
-                          },
-                          icon: const Icon(Icons.payment_rounded, size: 16),
-                          label: const Text('تسجيل دفعة', style: TextStyle(fontSize: 12)),
-                        ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                          onPressed: () {
-                            ref.read(selectedTabProvider.notifier).state = 5;
-                          },
-                          icon: const Icon(Icons.upload_file_rounded, size: 16),
-                          label: const Text('استيراد CSV', style: TextStyle(fontSize: 12)),
-                        ),
-                    ],
+                  DashboardQuickActions(
+                    onAddMember: () {
+                      showDialog<void>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const _AddMemberDialog(),
+                      );
+                    },
+                    onNewSubscription: () {
+                      showDialog<void>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const _AddMembershipDialog(),
+                      );
+                    },
+                    onRecordPayment: () {
+                      showDialog<void>(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const _AddPaymentDialog(),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -489,33 +562,53 @@ class _DashboardOverviewTab extends ConsumerWidget {
             onTap: () => ref.read(selectedTabProvider.notifier).state = 4,
             borderRadius: BorderRadius.circular(16),
             child: Card(
-              color: AppColors.surfaceCard,
+              color: context.appPalette.surfaceCard,
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Text('إيرادات اليوم المستلمة', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                            SizedBox(width: 6),
-                            Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.textMuted),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          RtlSupport.formatEgp(todayRevenue),
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.success),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  'إيرادات اليوم المستلمة',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: context.appPalette.textSecondary,
+                                      fontSize: 13),
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.arrow_forward_ios_rounded,
+                                  size: 12,
+                                  color: context.appPalette.textMuted),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            RtlSupport.formatEgp(todayRevenue),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: context.appPalette.success),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 12),
                     CircleAvatar(
                       radius: 26,
-                      backgroundColor: AppColors.success.withOpacity(0.15),
-                      child: const Icon(Icons.monetization_on_rounded, color: AppColors.success, size: 28),
+                      backgroundColor:
+                          context.appPalette.success.withValues(alpha: 0.15),
+                      child: Icon(Icons.monetization_on_rounded,
+                          color: context.appPalette.success, size: 28),
                     ),
                   ],
                 ),
@@ -525,19 +618,26 @@ class _DashboardOverviewTab extends ConsumerWidget {
           const SizedBox(height: 24),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('آخر الأعضاء المسجلين', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Expanded(
+                child: Text(
+                  'آخر الأعضاء المسجلين',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
               TextButton(
-                onPressed: () => ref.read(selectedTabProvider.notifier).state = 1,
-                child: const Text('عرض الكل', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                onPressed: () =>
+                    ref.read(selectedTabProvider.notifier).state = 1,
+                child: Text('عرض الكل',
+                    style: TextStyle(
+                        color: context.appPalette.primary, fontSize: 12)),
               ),
             ],
           ),
           const SizedBox(height: 8),
 
           if (data.members.isEmpty)
-            _buildEmptyCard('لا يوجد أعضاء مسجلين بعد.')
+            _buildEmptyCard(context, 'لا يوجد أعضاء مسجلين بعد.')
           else
             ListView.separated(
               shrinkWrap: true,
@@ -547,22 +647,35 @@ class _DashboardOverviewTab extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final member = data.members[index];
                 return ListTile(
-                  tileColor: AppColors.surfaceCard,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  tileColor: context.appPalette.surfaceCard,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   leading: CircleAvatar(
-                    backgroundColor: AppColors.primary.withOpacity(0.15),
-                    child: Text(member.fullName[0], style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                    backgroundColor:
+                        context.appPalette.primary.withValues(alpha: 0.15),
+                    child: Text(_memberInitial(member.fullName),
+                        style: TextStyle(
+                            color: context.appPalette.primary,
+                            fontWeight: FontWeight.bold)),
                   ),
-                  title: Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: Text('انضمام: ${RtlSupport.formatDate(member.joinDate)}', style: const TextStyle(fontSize: 11)),
-                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textMuted),
+                  title: Text(member.fullName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14)),
+                  subtitle: Text(
+                      'انضمام: ${RtlSupport.formatDate(member.joinDate)}',
+                      style: const TextStyle(fontSize: 11)),
+                  trailing: Icon(Icons.arrow_forward_ios_rounded,
+                      size: 14, color: context.appPalette.textMuted),
                   onTap: () {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
-                      backgroundColor: AppColors.surfaceCard,
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-                      builder: (ctx) => _MemberDetailsBottomSheet(member: member),
+                      backgroundColor: context.appPalette.surfaceCard,
+                      shape: const RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(20))),
+                      builder: (ctx) =>
+                          _MemberDetailsBottomSheet(member: member),
                     );
                   },
                 );
@@ -572,19 +685,26 @@ class _DashboardOverviewTab extends ConsumerWidget {
           const SizedBox(height: 24),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('آخر الإيرادات والمدفوعات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Expanded(
+                child: Text(
+                  'آخر الإيرادات والمدفوعات',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
               TextButton(
-                onPressed: () => ref.read(selectedTabProvider.notifier).state = 4,
-                child: const Text('سجل الدفع', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                onPressed: () =>
+                    ref.read(selectedTabProvider.notifier).state = 4,
+                child: Text('سجل الدفع',
+                    style: TextStyle(
+                        color: context.appPalette.primary, fontSize: 12)),
               ),
             ],
           ),
           const SizedBox(height: 8),
 
           if (data.payments.isEmpty)
-            _buildEmptyCard('لا يوجد مدفوعات مسجلة بعد.')
+            _buildEmptyCard(context, 'لا يوجد مدفوعات مسجلة بعد.')
           else
             ListView.separated(
               shrinkWrap: true,
@@ -594,23 +714,31 @@ class _DashboardOverviewTab extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final payment = data.payments[index];
                 return ListTile(
-                  tileColor: AppColors.surfaceCard,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  tileColor: context.appPalette.surfaceCard,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   leading: CircleAvatar(
-                    backgroundColor: AppColors.success.withOpacity(0.15),
-                    child: const Icon(Icons.receipt_long_rounded, color: AppColors.success, size: 18),
+                    backgroundColor:
+                        context.appPalette.success.withValues(alpha: 0.15),
+                    child: Icon(Icons.receipt_long_rounded,
+                        color: context.appPalette.success, size: 18),
                   ),
                   title: Text(
                     payment.notes ?? 'إيصال دفع',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   subtitle: Text(
                     '${payment.paymentMethod == "cash" ? "نقدي" : "بطاقة/تحويل"} • ${RtlSupport.formatDate(payment.paidAt)}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style: TextStyle(
+                        fontSize: 11, color: context.appPalette.textSecondary),
                   ),
                   trailing: Text(
                     RtlSupport.formatEgp(payment.amount),
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.success, fontSize: 14),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: context.appPalette.success,
+                        fontSize: 14),
                   ),
                   onTap: () => ref.read(selectedTabProvider.notifier).state = 4,
                 );
@@ -622,6 +750,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
   }
 
   Widget _buildClickableStatCard({
+    required BuildContext context,
     required String label,
     required String value,
     required IconData icon,
@@ -632,7 +761,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Card(
-        color: AppColors.surfaceCard,
+        color: context.appPalette.surfaceCard,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -643,16 +772,36 @@ class _DashboardOverviewTab extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Icon(icon, color: color, size: 22),
-                  Row(
-                    children: [
-                      Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.textMuted),
-                    ],
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                                color: context.appPalette.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_forward_ios_rounded,
+                            size: 10, color: context.appPalette.textMuted),
+                      ],
+                    ),
                   ),
                 ],
               ),
-              Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: context.appPalette.textPrimary)),
             ],
           ),
         ),
@@ -660,11 +809,16 @@ class _DashboardOverviewTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyCard(String text) {
+  Widget _buildEmptyCard(BuildContext context, String text) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: AppColors.surfaceCard, borderRadius: BorderRadius.circular(16)),
-      child: Center(child: Text(text, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
+      decoration: BoxDecoration(
+          color: context.appPalette.surfaceCard,
+          borderRadius: BorderRadius.circular(16)),
+      child: Center(
+          child: Text(text,
+              style: TextStyle(
+                  color: context.appPalette.textSecondary, fontSize: 13))),
     );
   }
 }
@@ -693,11 +847,10 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
   Widget build(BuildContext context) {
     final data = ref.watch(dataSyncServiceProvider);
     final filterType = ref.watch(memberFilterProvider);
+    final searchQuery = _searchQuery.trim().toLowerCase();
 
     final filteredMembers = data.members.where((m) {
-      final nameMatch = m.fullName.toLowerCase().contains(_searchQuery.toLowerCase());
-      final phoneMatch = m.phone?.contains(_searchQuery) ?? false;
-      final matchesSearch = nameMatch || phoneMatch;
+      final matchesSearch = memberMatchesSearch(m, searchQuery);
 
       if (filterType == 'active') {
         return matchesSearch && m.isActive;
@@ -736,8 +889,10 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                 runSpacing: 8,
                 children: [
                   _buildFilterChip('all', 'الكل (${data.members.length})'),
-                  _buildFilterChip('active', 'نشط (${data.members.where((m) => m.isActive).length})'),
-                  _buildFilterChip('inactive', 'غير نشط (${data.members.where((m) => !m.isActive).length})'),
+                  _buildFilterChip('active',
+                      'نشط (${data.members.where((m) => m.isActive).length})'),
+                  _buildFilterChip('inactive',
+                      'غير نشط (${data.members.where((m) => !m.isActive).length})'),
                 ],
               ),
             ],
@@ -746,67 +901,137 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
 
         Expanded(
           child: filteredMembers.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.people_outline_rounded, size: 48, color: AppColors.textMuted.withOpacity(0.5)),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'لا يوجد أعضاء يطابقون البحث أو القائمة فارغة',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (_) => const _AddMemberDialog(),
-                            );
-                          },
-                          icon: const Icon(Icons.person_add_rounded),
-                          label: const Text('إضافة عضو جديد الآن'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
+              ? data.syncStatus == SyncStatus.syncing && data.members.isEmpty
+                  ? Center(
+                      child: CircularProgressIndicator(
+                          color: context.appPalette.primary),
+                    )
+                  : data.syncStatus == SyncStatus.error && data.members.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.cloud_off_rounded,
+                                    color: context.appPalette.error, size: 40),
+                                const SizedBox(height: 12),
+                                Text(
+                                  data.syncErrorMessage ??
+                                      'تعذر تحميل بيانات الأعضاء.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: context.appPalette.textSecondary),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: () => ref
+                                      .read(dataSyncServiceProvider.notifier)
+                                      .syncAll(forceRetry: true),
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('إعادة المحاولة'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.people_outline_rounded,
+                                    size: 48,
+                                    color: context.appPalette.textMuted
+                                        .withValues(alpha: 0.5)),
+                                const SizedBox(height: 12),
+                                Text(
+                                  data.members.isEmpty
+                                      ? 'لا يوجد أعضاء مسجلون حالياً.'
+                                      : searchQuery.isNotEmpty
+                                          ? 'لا توجد نتائج مطابقة للبحث.'
+                                          : 'لا يوجد أعضاء ضمن هذا التصنيف.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: context.appPalette.textSecondary,
+                                      fontSize: 14),
+                                ),
+                                if (data.members.isNotEmpty ||
+                                    searchQuery.isNotEmpty ||
+                                    filterType != 'all') ...[
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      if (searchQuery.isNotEmpty) {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      } else if (filterType != 'all') {
+                                        ref
+                                            .read(memberFilterProvider.notifier)
+                                            .state = 'all';
+                                      }
+                                    },
+                                    icon: Icon(searchQuery.isNotEmpty
+                                        ? Icons.clear_rounded
+                                        : Icons.filter_alt_off_rounded),
+                                    label: Text(searchQuery.isNotEmpty
+                                        ? 'مسح البحث'
+                                        : 'عرض كل الأعضاء'),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: filteredMembers.length,
                   itemBuilder: (context, index) {
                     final member = filteredMembers[index];
                     return Card(
-                      color: AppColors.surfaceCard,
+                      color: context.appPalette.surfaceCard,
                       margin: const EdgeInsets.only(bottom: 10),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: AppColors.primary.withOpacity(0.12),
-                          child: Text(member.fullName[0], style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          backgroundColor: context.appPalette.primary
+                              .withValues(alpha: 0.12),
+                          child: Text(_memberInitial(member.fullName),
+                              style: TextStyle(
+                                  color: context.appPalette.primary,
+                                  fontWeight: FontWeight.bold)),
                         ),
-                        title: Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        title: Text(member.fullName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (member.phone != null && member.phone!.isNotEmpty)
-                              Text(member.phone!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                            Text('انضمام: ${RtlSupport.formatDate(member.joinDate)}', style: const TextStyle(fontSize: 11)),
+                            if (member.phone != null &&
+                                member.phone!.isNotEmpty)
+                              Text(member.phone!,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.appPalette.textSecondary)),
+                            Text(
+                                'انضمام: ${RtlSupport.formatDate(member.joinDate)}',
+                                style: const TextStyle(fontSize: 11)),
                           ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (member.phone != null && member.phone!.isNotEmpty)
+                            if (member.phone != null &&
+                                member.phone!.isNotEmpty)
                               IconButton(
-                                icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.success),
+                                icon: Icon(Icons.chat_bubble_outline_rounded,
+                                    color: context.appPalette.success),
                                 tooltip: 'مراسلة واتساب',
                                 onPressed: () => _openWhatsapp(member),
                               ),
                             IconButton(
-                              icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.primary),
+                              icon: Icon(Icons.arrow_forward_ios_rounded,
+                                  size: 16, color: context.appPalette.primary),
                               onPressed: () => _showMemberDetails(member),
                             ),
                           ],
@@ -842,34 +1067,48 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
     final isSelected = activeFilter == type;
 
     return ChoiceChip(
-      label: Text(label, style: TextStyle(color: isSelected ? const Color(0xFF0F141C) : AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+      label: Text(label,
+          style: TextStyle(
+              color: isSelected
+                  ? const Color(0xFF0F141C)
+                  : context.appPalette.textPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.bold)),
       selected: isSelected,
       onSelected: (_) => ref.read(memberFilterProvider.notifier).state = type,
-      selectedColor: AppColors.primary,
-      backgroundColor: AppColors.surface,
+      selectedColor: context.appPalette.primary,
+      backgroundColor: context.appPalette.surface,
     );
   }
 
   void _openWhatsapp(Member member) {
     if (member.phone == null || member.phone!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('هذا العضو ليس لديه رقم هاتف مسجل.'), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('هذا العضو ليس لديه رقم هاتف مسجل.'),
+            backgroundColor: context.appPalette.error),
       );
       return;
     }
 
     final data = ref.read(dataSyncServiceProvider);
-    final activeMembership = data.memberships.where((m) => m.memberId == member.id && !m.isExpired).firstOrNull;
-    final planName = activeMembership?.planId != null
-        ? data.plans.where((p) => p.id == activeMembership!.planId).firstOrNull?.name ?? 'الاشتراك الحالي'
+    final activeMembership = data.memberships
+        .where((m) => m.memberId == member.id && !m.isExpired)
+        .firstOrNull;
+    final activePlanId = activeMembership?.planId;
+    final planName = activePlanId != null
+        ? data.plans.where((p) => p.id == activePlanId).firstOrNull?.name ??
+            'الاشتراك الحالي'
         : 'الاشتراك الشهري';
 
     final dueAmount = activeMembership?.price ?? 0.0;
-    final endDateStr = activeMembership != null ? RtlSupport.formatDate(activeMembership.endDate) : 'نهاية الشهر';
+    final endDateStr = activeMembership != null
+        ? RtlSupport.formatDate(activeMembership.endDate)
+        : 'نهاية الشهر';
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surfaceCard,
+      backgroundColor: context.appPalette.surfaceCard,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: Container(
@@ -878,10 +1117,13 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('مراسلة ${member.fullName} عبر واتساب:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text('مراسلة ${member.fullName} عبر واتساب:',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.chat_rounded, color: AppColors.success),
+                leading:
+                    Icon(Icons.chat_rounded, color: context.appPalette.success),
                 title: const Text('رسالة ترحيبية وتواصل عام'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -892,24 +1134,29 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.payment_rounded, color: AppColors.primary),
-                title: Text('تذكير بمستحقات الاشتراك (${RtlSupport.formatEgp(dueAmount)})'),
+                leading: Icon(Icons.payment_rounded,
+                    color: context.appPalette.primary),
+                title: Text(
+                    'تذكير بمستحقات الاشتراك (${RtlSupport.formatEgp(dueAmount)})'),
                 onTap: () {
                   Navigator.pop(ctx);
                   WhatsappService.launchWhatsApp(
                     phone: member.phone!,
-                    message: WhatsappService.getPaymentReminder(member.fullName, dueAmount),
+                    message: WhatsappService.getPaymentReminder(
+                        member.fullName, dueAmount),
                   );
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.timer_rounded, color: AppColors.warning),
+                leading: Icon(Icons.timer_rounded,
+                    color: context.appPalette.warning),
                 title: Text('تذكير بانتهاء الاشتراك ($endDateStr)'),
                 onTap: () {
                   Navigator.pop(ctx);
                   WhatsappService.launchWhatsApp(
                     phone: member.phone!,
-                    message: WhatsappService.getExpiryReminder(member.fullName, planName, endDateStr),
+                    message: WhatsappService.getExpiryReminder(
+                        member.fullName, planName, endDateStr),
                   );
                 },
               ),
@@ -924,8 +1171,9 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surfaceCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: context.appPalette.surfaceCard,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => _MemberDetailsBottomSheet(member: member),
     );
   }
@@ -971,12 +1219,13 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
       final phone = _phoneController.text.trim();
       final notes = _notesController.text.trim();
 
-      final newMember = await ref.read(dataSyncServiceProvider.notifier).addMember(
-            fullName: name,
-            phone: phone.isNotEmpty ? phone : null,
-            notes: notes.isNotEmpty ? notes : null,
-            joinDate: _joinDate,
-          );
+      final newMember =
+          await ref.read(dataSyncServiceProvider.notifier).addMember(
+                fullName: name,
+                phone: phone.isNotEmpty ? phone : null,
+                notes: notes.isNotEmpty ? notes : null,
+                joinDate: _joinDate,
+              );
 
       if (!mounted) return;
 
@@ -989,7 +1238,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
             textDirection: ui.TextDirection.rtl,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          backgroundColor: AppColors.success,
+          backgroundColor: context.appPalette.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1003,8 +1252,9 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('فشل الحفظ: $cleanMsg', textDirection: ui.TextDirection.rtl),
-          backgroundColor: AppColors.error,
+          content:
+              Text('فشل الحفظ: $cleanMsg', textDirection: ui.TextDirection.rtl),
+          backgroundColor: context.appPalette.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1028,7 +1278,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('إضافة عضو جديد في جيم الديب'),
         content: Form(
           key: _formKey,
@@ -1042,10 +1292,12 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.error.withOpacity(0.15),
+                      color: context.appPalette.error.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
+                    child: Text(_errorMessage!,
+                        style: TextStyle(
+                            color: context.appPalette.error, fontSize: 12)),
                   ),
 
                 TextFormField(
@@ -1056,7 +1308,8 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                     prefixIcon: Icon(Icons.person_rounded),
                   ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'يرجى إدخال اسم العضو';
+                    if (v == null || v.trim().isEmpty)
+                      return 'يرجى إدخال اسم العضو';
                     if (v.trim().length < 2) return 'الاسم قصير جداً';
                     return null;
                   },
@@ -1079,25 +1332,33 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                   onTap: _pickDate,
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: context.appPalette.border),
                       borderRadius: BorderRadius.circular(10),
-                      color: AppColors.surface,
+                      color: context.appPalette.surface,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
-                            const SizedBox(width: 8),
-                            const Text('تاريخ الانضمام:', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                            Icon(Icons.calendar_today_rounded,
+                                size: 18, color: context.appPalette.primary),
+                            SizedBox(width: 8),
+                            Text('تاريخ الانضمام:',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: context.appPalette.textSecondary)),
                           ],
                         ),
                         Text(
                           DateFormat('yyyy/MM/dd').format(_joinDate),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: context.appPalette.textPrimary),
                         ),
                       ],
                     ),
@@ -1126,7 +1387,12 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
             child: _isSaving
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Color(0xFF0F141C))))
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(Color(0xFF0F141C))))
                 : const Text('حفظ العضو'),
           ),
         ],
@@ -1184,8 +1450,12 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
       await ref.read(dataSyncServiceProvider.notifier).editMember(
             widget.member.copyWith(
               fullName: _nameController.text.trim(),
-              phone: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
-              notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+              phone: _phoneController.text.trim().isNotEmpty
+                  ? _phoneController.text.trim()
+                  : null,
+              notes: _notesController.text.trim().isNotEmpty
+                  ? _notesController.text.trim()
+                  : null,
               joinDate: _joinDate,
               isActive: _isActive,
             ),
@@ -1195,13 +1465,19 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
       Navigator.of(context).pop();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث بيانات العضو بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تم تحديث بيانات العضو بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ أثناء التعديل: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('خطأ أثناء التعديل: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -1223,7 +1499,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تعديل بيانات العضو'),
         content: Form(
           key: _formKey,
@@ -1233,8 +1509,10 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
               children: [
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'الاسم الكامل *'),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
+                  decoration:
+                      const InputDecoration(labelText: 'الاسم الكامل *'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -1247,25 +1525,33 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
                   onTap: _pickJoinDate,
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: context.appPalette.border),
                       borderRadius: BorderRadius.circular(10),
-                      color: AppColors.surface,
+                      color: context.appPalette.surface,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
+                            Icon(Icons.calendar_today_rounded,
+                                size: 18, color: context.appPalette.primary),
                             SizedBox(width: 8),
-                            Text('تاريخ الانضمام:', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                            Text('تاريخ الانضمام:',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: context.appPalette.textSecondary)),
                           ],
                         ),
                         Text(
                           DateFormat('yyyy/MM/dd').format(_joinDate),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: context.appPalette.textPrimary),
                         ),
                       ],
                     ),
@@ -1281,7 +1567,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
                 SwitchListTile(
                   title: const Text('حالة الحساب نشط'),
                   value: _isActive,
-                  activeColor: AppColors.primary,
+                  activeThumbColor: context.appPalette.primary,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (v) => setState(() => _isActive = v),
                 ),
@@ -1290,10 +1576,14 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
           ),
         ),
         actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('حفظ التعديلات'),
+            child: _isSaving
+                ? const CircularProgressIndicator()
+                : const Text('حفظ التعديلات'),
           ),
         ],
       ),
@@ -1313,9 +1603,11 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
 
-    final memberMemberships = data.memberships.where((m) => m.memberId == member.id).toList();
+    final memberMemberships =
+        data.memberships.where((m) => m.memberId == member.id).toList();
     final memberPayments = data.payments.where((p) {
-      if (p.membershipId != null && memberMemberships.any((m) => m.id == p.membershipId)) return true;
+      if (p.membershipId != null &&
+          memberMemberships.any((m) => m.id == p.membershipId)) return true;
       if (p.notes != null && p.notes!.contains(member.fullName)) return true;
       return false;
     }).toList();
@@ -1339,147 +1631,199 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                     children: [
                       CircleAvatar(
                         radius: 22,
-                        backgroundColor: AppColors.primary.withOpacity(0.2),
-                        child: Text(member.fullName[0], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+                        backgroundColor:
+                            context.appPalette.primary.withValues(alpha: 0.2),
+                        child: Text(_memberInitial(member.fullName),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: context.appPalette.primary)),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                            Text(member.isActive ? 'عضو نشط' : 'عضو غير نشط', style: TextStyle(color: member.isActive ? AppColors.success : AppColors.error, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(member.fullName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 17)),
+                            Text(member.isActive ? 'عضو نشط' : 'عضو غير نشط',
+                                style: TextStyle(
+                                    color: member.isActive
+                                        ? context.appPalette.success
+                                        : context.appPalette.error,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context)),
               ],
             ),
             const Divider(height: 24),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('رقم الهاتف المسجل', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                    Text(member.phone ?? 'غير متوفر', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text('رقم الهاتف المسجل',
+                        style: TextStyle(
+                            color: context.appPalette.textSecondary,
+                            fontSize: 11)),
+                    Text(member.phone ?? 'غير متوفر',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
                   ],
                 ),
                 if (member.phone != null && member.phone!.isNotEmpty)
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: context.appPalette.success,
+                        foregroundColor: Colors.white),
                     icon: const Icon(Icons.chat, size: 16),
                     label: const Text('واتساب'),
                     onPressed: () {
                       WhatsappService.launchWhatsApp(
                         phone: member.phone!,
-                        message: WhatsappService.getGeneralContact(member.fullName),
+                        message:
+                            WhatsappService.getGeneralContact(member.fullName),
                       );
                     },
                   ),
               ],
             ),
             const SizedBox(height: 12),
-
-            _buildDetailItem('تاريخ الانضمام', RtlSupport.formatDate(member.joinDate)),
-            _buildDetailItem('ملاحظات الكابتن', member.notes ?? 'لا توجد ملاحظات مدونة.'),
-
+            _buildDetailItem(context, 'تاريخ الانضمام',
+                RtlSupport.formatDate(member.joinDate)),
+            _buildDetailItem(context, 'ملاحظات الكابتن',
+                member.notes ?? 'لا توجد ملاحظات مدونة.'),
             const Divider(height: 28),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('سجل الاشتراكات والباقات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const Text('سجل الاشتراكات والباقات',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 TextButton.icon(
                   onPressed: () {
                     showDialog(
                       context: context,
-                      builder: (_) => _CreateMembershipDialog(preSelectedMemberId: member.id),
+                      builder: (_) => _CreateMembershipDialog(
+                          preSelectedMemberId: member.id),
                     );
                   },
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('اشتراك جديد', style: TextStyle(fontSize: 12)),
+                  label:
+                      const Text('اشتراك جديد', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-
             if (memberMemberships.isEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(10)),
-                child: const Center(child: Text('لا يوجد اشتراكات مسجلة لهذا العضو.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                decoration: BoxDecoration(
+                    color: context.appPalette.surface,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Center(
+                    child: Text('لا يوجد اشتراكات مسجلة لهذا العضو.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: context.appPalette.textSecondary))),
               )
             else
               ...memberMemberships.map((m) {
-                final plan = data.plans.where((p) => p.id == m.planId).firstOrNull;
+                final plan =
+                    data.plans.where((p) => p.id == m.planId).firstOrNull;
                 final expired = m.isExpired;
                 return Card(
-                  color: AppColors.surface,
+                  color: context.appPalette.surface,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     dense: true,
-                    title: Text(plan?.name ?? 'باقة مخصصة', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('من ${RtlSupport.formatDate(m.startDate)} إلى ${RtlSupport.formatDate(m.endDate)} • ${RtlSupport.formatEgp(m.price)}'),
+                    title: Text(plan?.name ?? 'باقة مخصصة',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(
+                        'من ${RtlSupport.formatDate(m.startDate)} إلى ${RtlSupport.formatDate(m.endDate)} • ${RtlSupport.formatEgp(m.price)}'),
                     trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: expired ? AppColors.error.withOpacity(0.1) : AppColors.success.withOpacity(0.1),
+                        color: expired
+                            ? context.appPalette.error.withValues(alpha: 0.1)
+                            : context.appPalette.success.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(expired ? 'منتهي' : 'نشط', style: TextStyle(color: expired ? AppColors.error : AppColors.success, fontSize: 10, fontWeight: FontWeight.bold)),
+                      child: Text(expired ? 'منتهي' : 'نشط',
+                          style: TextStyle(
+                              color: expired
+                                  ? context.appPalette.error
+                                  : context.appPalette.success,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold)),
                     ),
                   ),
                 );
               }),
-
             const Divider(height: 28),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('سجل المدفوعات والإيصالات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const Text('سجل المدفوعات والإيصالات',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 TextButton.icon(
                   onPressed: () {
                     showDialog(
                       context: context,
-                      builder: (_) => _RecordPaymentDialog(preSelectedMemberId: member.id),
+                      builder: (_) =>
+                          _RecordPaymentDialog(preSelectedMemberId: member.id),
                     );
                   },
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('تسجيل دفعة', style: TextStyle(fontSize: 12)),
+                  label:
+                      const Text('تسجيل دفعة', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-
             if (memberPayments.isEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(10)),
-                child: const Center(child: Text('لا يوجد سجل مدفوعات مسجل.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                decoration: BoxDecoration(
+                    color: context.appPalette.surface,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Center(
+                    child: Text('لا يوجد سجل مدفوعات مسجل.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: context.appPalette.textSecondary))),
               )
             else
               ...memberPayments.map((p) {
                 return Card(
-                  color: AppColors.surface,
+                  color: context.appPalette.surface,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     dense: true,
-                    title: Text(RtlSupport.formatEgp(p.amount), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.success)),
-                    subtitle: Text('${p.paymentMethod == "cash" ? "نقدي" : "فيزا"} • ${RtlSupport.formatDate(p.paidAt)}'),
-                    trailing: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 16),
+                    title: Text(RtlSupport.formatEgp(p.amount),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: context.appPalette.success)),
+                    subtitle: Text(
+                        '${p.paymentMethod == "cash" ? "نقدي" : "فيزا"} • ${RtlSupport.formatDate(p.paidAt)}'),
+                    trailing: Icon(Icons.check_circle_rounded,
+                        color: context.appPalette.success, size: 16),
                   ),
                 );
               }),
-
             const SizedBox(height: 24),
-
             Row(
               children: [
                 Expanded(
@@ -1497,7 +1841,9 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: context.appPalette.error,
+                        foregroundColor: Colors.white),
                     icon: const Icon(Icons.delete_forever_rounded, size: 18),
                     label: const Text('حذف العضو'),
                     onPressed: () => _confirmDeleteMember(context, ref, member),
@@ -1511,39 +1857,52 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailItem(String label, String val) {
+  Widget _buildDetailItem(BuildContext context, String label, String val) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          Text(label,
+              style: TextStyle(
+                  color: context.appPalette.textSecondary, fontSize: 11)),
           const SizedBox(height: 2),
-          Text(val, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(val,
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  void _confirmDeleteMember(BuildContext context, WidgetRef ref, Member member) {
+  void _confirmDeleteMember(
+      BuildContext context, WidgetRef ref, Member member) {
     showDialog(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تأكيد الحذف'),
-          content: Text('هل أنت متأكد من حذف العضو ${member.fullName} نهائياً؟'),
+          content:
+              Text('هل أنت متأكد من حذف العضو ${member.fullName} نهائياً؟'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
                 Navigator.pop(context); // Close bottom sheet
-                await ref.read(dataSyncServiceProvider.notifier).deleteMember(member.id);
+                await ref
+                    .read(dataSyncServiceProvider.notifier)
+                    .deleteMember(member.id);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف العضو بنجاح', textDirection: ui.TextDirection.rtl)),
+                  const SnackBar(
+                      content: Text('تم حذف العضو بنجاح',
+                          textDirection: ui.TextDirection.rtl)),
                 );
               },
               child: const Text('حذف', style: TextStyle(color: Colors.white)),
@@ -1569,57 +1928,102 @@ class _PlansTab extends ConsumerWidget {
       children: [
         Expanded(
           child: data.plans.isEmpty
-              ? const Center(child: Text('لا توجد باقات اشتراك مسجلة حالياً.', style: TextStyle(color: AppColors.textSecondary)))
+              ? Center(
+                  child: Text('لا توجد باقات اشتراك مسجلة حالياً.',
+                      style:
+                          TextStyle(color: context.appPalette.textSecondary)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: data.plans.length,
                   itemBuilder: (context, index) {
                     final plan = data.plans[index];
                     return Card(
-                      color: AppColors.surfaceCard,
+                      color: context.appPalette.surfaceCard,
                       margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(plan.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: plan.isActive ? AppColors.success.withOpacity(0.1) : AppColors.error.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(4),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          plan.name,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16),
+                                        ),
                                       ),
-                                      child: Text(plan.isActive ? 'مفعلة' : 'معطلة', style: TextStyle(color: plan.isActive ? AppColors.success : AppColors.error, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text('المدة: ${plan.durationDays} يوم', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                              ],
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: plan.isActive
+                                              ? context.appPalette.success
+                                                  .withValues(alpha: 0.1)
+                                              : context.appPalette.error
+                                                  .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                            plan.isActive ? 'مفعلة' : 'معطلة',
+                                            style: TextStyle(
+                                                color: plan.isActive
+                                                    ? context.appPalette.success
+                                                    : context.appPalette.error,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text('المدة: ${plan.durationDays} يوم',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: context
+                                              .appPalette.textSecondary)),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 12),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text(RtlSupport.formatEgp(plan.price), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                Text(RtlSupport.formatEgp(plan.price),
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: context.appPalette.primary)),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.edit_rounded, color: AppColors.textSecondary, size: 20),
+                                      icon: Icon(Icons.edit_rounded,
+                                          color:
+                                              context.appPalette.textSecondary,
+                                          size: 20),
                                       onPressed: () {
-                                        showDialog(context: context, builder: (_) => _EditPlanDialog(plan: plan));
+                                        showDialog(
+                                            context: context,
+                                            builder: (_) =>
+                                                _EditPlanDialog(plan: plan));
                                       },
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.delete_rounded, color: AppColors.error, size: 20),
-                                      onPressed: () => _confirmDeletePlan(context, ref, plan),
+                                      icon: Icon(Icons.delete_rounded,
+                                          color: context.appPalette.error,
+                                          size: 20),
+                                      onPressed: () => _confirmDeletePlan(
+                                          context, ref, plan),
                                     ),
                                   ],
                                 )
@@ -1634,36 +2038,48 @@ class _PlansTab extends ConsumerWidget {
         ),
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            onPressed: () {
-              showDialog(context: context, builder: (_) => const _AddPlanDialog());
-            },
-            icon: const Icon(Icons.add_card_rounded),
-            label: const Text('إضافة باقة جديدة'),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showDialog<void>(
+                    context: context, builder: (_) => const _AddPlanDialog());
+              },
+              icon: const Icon(Icons.add_card_rounded),
+              label: const Text('إضافة باقة جديدة'),
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _confirmDeletePlan(BuildContext context, WidgetRef ref, MembershipPlan plan) {
+  void _confirmDeletePlan(
+      BuildContext context, WidgetRef ref, MembershipPlan plan) {
     showDialog(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تأكيد حذف الباقة'),
           content: Text('هل أنت متأكد من حذف الباقة ${plan.name} نهائياً؟'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await ref.read(dataSyncServiceProvider.notifier).deletePlan(plan.id);
+                await ref
+                    .read(dataSyncServiceProvider.notifier)
+                    .deletePlan(plan.id);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف الباقة بنجاح', textDirection: ui.TextDirection.rtl)),
+                  const SnackBar(
+                      content: Text('تم حذف الباقة بنجاح',
+                          textDirection: ui.TextDirection.rtl)),
                 );
               },
               child: const Text('حذف', style: TextStyle(color: Colors.white)),
@@ -1717,13 +2133,18 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
       Navigator.of(context).pop();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تمت إضافة الباقة بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تمت إضافة الباقة بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل الحفظ: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('فشل الحفظ: $e', textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -1733,7 +2154,7 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('إضافة باقة اشتراك جديدة'),
         content: Form(
           key: _formKey,
@@ -1743,30 +2164,43 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
               TextFormField(
                 controller: _nameCtrl,
                 decoration: const InputDecoration(labelText: 'اسم الباقة *'),
-                validator: (v) => v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _durationCtrl,
                 decoration: const InputDecoration(labelText: 'المدة باليوم *'),
                 keyboardType: TextInputType.number,
-                validator: (v) => v == null || int.tryParse(v) == null ? 'أدخل رقم صحيح' : null,
+                validator: (v) {
+                  final duration = int.tryParse(v ?? '');
+                  return duration == null || duration <= 0
+                      ? 'أدخل مدة أكبر من صفر'
+                      : null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _priceCtrl,
-                decoration: const InputDecoration(labelText: 'سعر الاشتراك (ج.م) *'),
+                decoration:
+                    const InputDecoration(labelText: 'سعر الاشتراك (ج.م) *'),
                 keyboardType: TextInputType.number,
-                validator: (v) => v == null || double.tryParse(v) == null ? 'أدخل مبلغ صحيح' : null,
+                validator: (v) => v == null || double.tryParse(v) == null
+                    ? 'أدخل مبلغ صحيح'
+                    : null,
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('إضافة'),
+            child: _isSaving
+                ? const CircularProgressIndicator()
+                : const Text('إضافة'),
           ),
         ],
       ),
@@ -1798,7 +2232,8 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.plan.name);
-    _durationCtrl = TextEditingController(text: widget.plan.durationDays.toString());
+    _durationCtrl =
+        TextEditingController(text: widget.plan.durationDays.toString());
     _priceCtrl = TextEditingController(text: widget.plan.price.toString());
     _isActive = widget.plan.isActive;
   }
@@ -1831,13 +2266,19 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
       Navigator.of(context).pop();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تعديل الباقة بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تم تعديل الباقة بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل التعديل: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content:
+                Text('فشل التعديل: $e', textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -1847,7 +2288,7 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تعديل باقة الاشتراك'),
         content: Form(
           key: _formKey,
@@ -1857,27 +2298,35 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
               TextFormField(
                 controller: _nameCtrl,
                 decoration: const InputDecoration(labelText: 'اسم الباقة *'),
-                validator: (v) => v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'الاسم مطلوب' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _durationCtrl,
                 decoration: const InputDecoration(labelText: 'المدة باليوم *'),
                 keyboardType: TextInputType.number,
-                validator: (v) => v == null || int.tryParse(v) == null ? 'أدخل رقم صحيح' : null,
+                validator: (v) {
+                  final duration = int.tryParse(v ?? '');
+                  return duration == null || duration <= 0
+                      ? 'أدخل مدة أكبر من صفر'
+                      : null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _priceCtrl,
                 decoration: const InputDecoration(labelText: 'السعر (ج.م) *'),
                 keyboardType: TextInputType.number,
-                validator: (v) => v == null || double.tryParse(v) == null ? 'أدخل مبلغ صحيح' : null,
+                validator: (v) => v == null || double.tryParse(v) == null
+                    ? 'أدخل مبلغ صحيح'
+                    : null,
               ),
               const SizedBox(height: 12),
               SwitchListTile(
                 title: const Text('حالة الباقة مفعلة'),
                 value: _isActive,
-                activeColor: AppColors.primary,
+                activeThumbColor: context.appPalette.primary,
                 contentPadding: EdgeInsets.zero,
                 onChanged: (v) => setState(() => _isActive = v),
               ),
@@ -1885,10 +2334,14 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
           ),
         ),
         actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('حفظ التعديلات'),
+            child: _isSaving
+                ? const CircularProgressIndicator()
+                : const Text('حفظ التعديلات'),
           ),
         ],
       ),
@@ -1910,64 +2363,127 @@ class _MembershipsTab extends ConsumerWidget {
       children: [
         Expanded(
           child: data.memberships.isEmpty
-              ? const Center(child: Text('لا توجد اشتراكات مفعلة حالياً.', style: TextStyle(color: AppColors.textSecondary)))
+              ? Center(
+                  child: Text('لا توجد اشتراكات مفعلة حالياً.',
+                      style:
+                          TextStyle(color: context.appPalette.textSecondary)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: data.memberships.length,
                   itemBuilder: (context, index) {
                     final membership = data.memberships[index];
-                    final member = data.members.where((m) => m.id == membership.memberId).firstOrNull ??
-                        Member(id: '', gymId: '', fullName: 'عضو محذوف', joinDate: DateTime.now(), createdAt: DateTime.now(), updatedAt: DateTime.now());
-                    final plan = data.plans.where((p) => p.id == membership.planId).firstOrNull ??
-                        MembershipPlan(id: '', gymId: '', name: 'باقة مخصصة', createdAt: DateTime.now(), updatedAt: DateTime.now());
+                    final member = data.members
+                            .where((m) => m.id == membership.memberId)
+                            .firstOrNull ??
+                        Member(
+                            id: '',
+                            gymId: '',
+                            fullName: 'عضو محذوف',
+                            joinDate: DateTime.now(),
+                            createdAt: DateTime.now(),
+                            updatedAt: DateTime.now());
+                    final plan = data.plans
+                            .where((p) => p.id == membership.planId)
+                            .firstOrNull ??
+                        MembershipPlan(
+                            id: '',
+                            gymId: '',
+                            name: 'باقة مخصصة',
+                            createdAt: DateTime.now(),
+                            updatedAt: DateTime.now());
 
                     final expired = membership.isExpired;
 
                     return Card(
-                      color: AppColors.surfaceCard,
+                      color: context.appPalette.surfaceCard,
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         onTap: () {
-                          showDialog(context: context, builder: (_) => _EditMembershipDialog(membership: membership));
+                          showDialog(
+                              context: context,
+                              builder: (_) => _EditMembershipDialog(
+                                  membership: membership));
                         },
                         leading: CircleAvatar(
-                          backgroundColor: expired ? AppColors.error.withOpacity(0.12) : AppColors.success.withOpacity(0.12),
-                          child: Icon(expired ? Icons.timer_off_rounded : Icons.offline_bolt_rounded, color: expired ? AppColors.error : AppColors.success),
+                          backgroundColor: expired
+                              ? context.appPalette.error.withValues(alpha: 0.12)
+                              : context.appPalette.success
+                                  .withValues(alpha: 0.12),
+                          child: Icon(
+                              expired
+                                  ? Icons.timer_off_rounded
+                                  : Icons.offline_bolt_rounded,
+                              color: expired
+                                  ? context.appPalette.error
+                                  : context.appPalette.success),
                         ),
-                        title: Text(member.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(member.fullName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('الباقة: ${plan.name} • القيمة: ${RtlSupport.formatEgp(membership.price)}', style: const TextStyle(fontSize: 12)),
-                            Text('من: ${RtlSupport.formatDate(membership.startDate)} إلى ${RtlSupport.formatDate(membership.endDate)}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                            Text('سجّل الاشتراك: ${data.creatorName(membership.createdBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            Text(
+                                'الباقة: ${plan.name} • القيمة: ${RtlSupport.formatEgp(membership.price)}',
+                                style: const TextStyle(fontSize: 12)),
+                            Text(
+                                'من: ${RtlSupport.formatDate(membership.startDate)} إلى ${RtlSupport.formatDate(membership.endDate)}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: context.appPalette.textSecondary)),
+                            Text(
+                                'سجّل الاشتراك: ${data.creatorName(membership.createdBy)}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: context.appPalette.textMuted)),
                           ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: expired ? AppColors.error.withOpacity(0.1) : AppColors.success.withOpacity(0.1),
+                                color: expired
+                                    ? context.appPalette.error
+                                        .withValues(alpha: 0.1)
+                                    : context.appPalette.success
+                                        .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                expired ? 'منتهي' : (membership.status == 'cancelled' ? 'ملغى' : 'ساري'),
-                                style: TextStyle(color: expired ? AppColors.error : AppColors.success, fontSize: 10, fontWeight: FontWeight.bold),
+                                expired
+                                    ? 'منتهي'
+                                    : (membership.status == 'cancelled'
+                                        ? 'ملغى'
+                                        : 'ساري'),
+                                style: TextStyle(
+                                    color: expired
+                                        ? context.appPalette.error
+                                        : context.appPalette.success,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.edit_rounded, size: 18, color: AppColors.textSecondary),
+                              icon: Icon(Icons.edit_rounded,
+                                  size: 18,
+                                  color: context.appPalette.textSecondary),
                               tooltip: 'تعديل بيانات الاشتراك',
                               onPressed: () {
-                                showDialog(context: context, builder: (_) => _EditMembershipDialog(membership: membership));
+                                showDialog(
+                                    context: context,
+                                    builder: (_) => _EditMembershipDialog(
+                                        membership: membership));
                               },
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                              icon: Icon(Icons.delete_outline_rounded,
+                                  size: 18, color: context.appPalette.error),
                               tooltip: 'حذف الاشتراك',
-                              onPressed: () => _confirmDeleteMembership(context, ref, membership),
+                              onPressed: () => _confirmDeleteMembership(
+                                  context, ref, membership),
                             ),
                           ],
                         ),
@@ -1978,43 +2494,176 @@ class _MembershipsTab extends ConsumerWidget {
         ),
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            onPressed: () {
-              showDialog(context: context, builder: (_) => const _CreateMembershipDialog());
-            },
-            icon: const Icon(Icons.add_task_rounded),
-            label: const Text('تسجيل اشتراك لعضو'),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showDialog<void>(
+                    context: context,
+                    builder: (_) => const _CreateMembershipDialog());
+              },
+              icon: const Icon(Icons.add_task_rounded),
+              label: const Text('تسجيل اشتراك لعضو'),
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _confirmDeleteMembership(BuildContext context, WidgetRef ref, Membership membership) {
+  void _confirmDeleteMembership(
+      BuildContext context, WidgetRef ref, Membership membership) {
     showDialog(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تأكيد حذف الاشتراك'),
-          content: const Text('هل أنت متأكد من حذف هذا الاشتراك؟ سيتم وضع علامة ملغى وحذفه من السجلات.'),
+          content: const Text(
+              'هل أنت متأكد من حذف هذا الاشتراك؟ سيتم وضع علامة ملغى وحذفه من السجلات.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await ref.read(dataSyncServiceProvider.notifier).deleteMembership(membership.id);
+                await ref
+                    .read(dataSyncServiceProvider.notifier)
+                    .deleteMembership(membership.id);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف الاشتراك بنجاح', textDirection: ui.TextDirection.rtl)),
+                  const SnackBar(
+                      content: Text('تم حذف الاشتراك بنجاح',
+                          textDirection: ui.TextDirection.rtl)),
                 );
               },
-              child: const Text('حذف الاشتراك', style: TextStyle(color: Colors.white)),
+              child: const Text('حذف الاشتراك',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ExpiringMembershipsTab extends ConsumerWidget {
+  const _ExpiringMembershipsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(dataSyncServiceProvider);
+    final today = DateTime.now();
+    final memberships = expiringMembershipsWithinDays(data.memberships, today)
+      ..sort((a, b) => a.endDate.compareTo(b.endDate));
+
+    if (memberships.isEmpty && data.syncStatus == SyncStatus.syncing) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+    if (memberships.isEmpty && data.syncStatus == SyncStatus.error) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 40),
+              const SizedBox(height: 12),
+              Text(
+                data.syncErrorMessage ?? 'تعذر تحميل الاشتراكات.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref
+                    .read(dataSyncServiceProvider.notifier)
+                    .syncAll(forceRetry: true),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('إعادة المحاولة'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (memberships.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'لا توجد اشتراكات نشطة تنتهي خلال الأيام السبعة القادمة.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        if (data.syncStatus == SyncStatus.error)
+          MaterialBanner(
+            content: Text(
+              data.syncErrorMessage ?? 'تعذر تحديث بيانات الاشتراكات.',
+            ),
+            leading: const Icon(Icons.cloud_off_rounded),
+            actions: [
+              TextButton(
+                onPressed: () => ref
+                    .read(dataSyncServiceProvider.notifier)
+                    .syncAll(forceRetry: true),
+                child: const Text('إعادة المحاولة'),
+              ),
+            ],
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: memberships.length,
+            itemBuilder: (context, index) {
+              final membership = memberships[index];
+              final member = data.members
+                  .where((item) => item.id == membership.memberId)
+                  .firstOrNull;
+              final remainingDays = membership.daysRemainingAt(today);
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor:
+                        context.appPalette.warning.withValues(alpha: 0.15),
+                    child: Icon(
+                      Icons.alarm_rounded,
+                      color: context.appPalette.warning,
+                    ),
+                  ),
+                  title: Text(
+                    member?.fullName ?? 'عضو محذوف',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'تاريخ الانتهاء: ${RtlSupport.formatDate(membership.endDate)}',
+                  ),
+                  trailing: Text(
+                    remainingDays == 0 ? 'اليوم' : 'متبقي $remainingDays يوم',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: context.appPalette.warning,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2028,7 +2677,8 @@ class _EditMembershipDialog extends ConsumerStatefulWidget {
   const _EditMembershipDialog({required this.membership});
 
   @override
-  ConsumerState<_EditMembershipDialog> createState() => _EditMembershipDialogState();
+  ConsumerState<_EditMembershipDialog> createState() =>
+      _EditMembershipDialogState();
 }
 
 class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
@@ -2044,7 +2694,8 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
   void initState() {
     super.initState();
     _planId = widget.membership.planId;
-    _priceCtrl = TextEditingController(text: widget.membership.price.toString());
+    _priceCtrl =
+        TextEditingController(text: widget.membership.price.toString());
     _startDate = widget.membership.startDate;
     _endDate = widget.membership.endDate;
     _status = widget.membership.status;
@@ -2075,13 +2726,19 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث بيانات الاشتراك بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تم تحديث بيانات الاشتراك بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ أثناء التعديل: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('خطأ أثناء التعديل: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -2093,7 +2750,7 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تعديل بيانات الاشتراك'),
         content: Form(
           key: _formKey,
@@ -2102,18 +2759,21 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _planId,
-                  decoration: const InputDecoration(labelText: 'خطة / باقة الاشتراك'),
+                  initialValue: _planId,
+                  decoration:
+                      const InputDecoration(labelText: 'خطة / باقة الاشتراك'),
                   items: data.plans.map((p) {
-                    return DropdownMenuItem(value: p.id, child: Text('${p.name} (${p.price} ج.م)'));
+                    return DropdownMenuItem(
+                        value: p.id, child: Text('${p.name} (${p.price} ج.م)'));
                   }).toList(),
                   onChanged: (val) {
                     setState(() {
                       _planId = val;
-                      final selected = data.plans.where((p) => p.id == val).firstOrNull;
+                      final selected =
+                          data.plans.where((p) => p.id == val).firstOrNull;
                       if (selected != null) {
                         _priceCtrl.text = selected.price.toString();
-                        _endDate = _startDate.add(Duration(days: selected.durationDays));
+                        _endDate = selected.endDateFor(_startDate);
                       }
                     });
                   },
@@ -2121,39 +2781,58 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _priceCtrl,
-                  decoration: const InputDecoration(labelText: 'سعر الاشتراك (ج.م) *'),
+                  decoration:
+                      const InputDecoration(labelText: 'سعر الاشتراك (ج.م) *'),
                   keyboardType: TextInputType.number,
-                  validator: (v) => v == null || double.tryParse(v) == null ? 'أدخل مبلغ صحيح' : null,
+                  validator: (v) => v == null || double.tryParse(v) == null
+                      ? 'أدخل مبلغ صحيح'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('تاريخ البدء', style: TextStyle(fontSize: 12)),
-                  subtitle: Text(DateFormat('yyyy/MM/dd').format(_startDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  title:
+                      const Text('تاريخ البدء', style: TextStyle(fontSize: 12)),
+                  subtitle: Text(DateFormat('yyyy/MM/dd').format(_startDate),
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   trailing: const Icon(Icons.calendar_today_rounded, size: 18),
                   onTap: () async {
-                    final picked = await showDatePicker(context: context, initialDate: _startDate, firstDate: DateTime(2020), lastDate: DateTime(2035));
+                    final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _startDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035));
                     if (picked != null) setState(() => _startDate = picked);
                   },
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('تاريخ الانتهاء', style: TextStyle(fontSize: 12)),
-                  subtitle: Text(DateFormat('yyyy/MM/dd').format(_endDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  title: const Text('تاريخ الانتهاء',
+                      style: TextStyle(fontSize: 12)),
+                  subtitle: Text(DateFormat('yyyy/MM/dd').format(_endDate),
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   trailing: const Icon(Icons.calendar_today_rounded, size: 18),
                   onTap: () async {
-                    final picked = await showDatePicker(context: context, initialDate: _endDate, firstDate: DateTime(2020), lastDate: DateTime(2035));
+                    final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _endDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035));
                     if (picked != null) setState(() => _endDate = picked);
                   },
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _status,
+                  initialValue: _status,
                   decoration: const InputDecoration(labelText: 'حالة الاشتراك'),
                   items: const [
-                    DropdownMenuItem(value: 'active', child: Text('ساري ومفعل (Active)')),
-                    DropdownMenuItem(value: 'expired', child: Text('منتهي (Expired)')),
-                    DropdownMenuItem(value: 'cancelled', child: Text('ملغى / متوقف (Cancelled)')),
+                    DropdownMenuItem(
+                        value: 'active', child: Text('ساري ومفعل (Active)')),
+                    DropdownMenuItem(
+                        value: 'expired', child: Text('منتهي (Expired)')),
+                    DropdownMenuItem(
+                        value: 'cancelled',
+                        child: Text('ملغى / متوقف (Cancelled)')),
                   ],
                   onChanged: (val) => setState(() => _status = val ?? 'active'),
                 ),
@@ -2162,10 +2841,14 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
           ),
         ),
         actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('حفظ التعديلات'),
+            child: _isSaving
+                ? const CircularProgressIndicator()
+                : const Text('حفظ التعديلات'),
           ),
         ],
       ),
@@ -2182,22 +2865,26 @@ class _CreateMembershipDialog extends ConsumerStatefulWidget {
   const _CreateMembershipDialog({this.preSelectedMemberId});
 
   @override
-  ConsumerState<_CreateMembershipDialog> createState() => _CreateMembershipDialogState();
+  ConsumerState<_CreateMembershipDialog> createState() =>
+      _CreateMembershipDialogState();
 }
 
-class _CreateMembershipDialogState extends ConsumerState<_CreateMembershipDialog> {
+class _CreateMembershipDialogState
+    extends ConsumerState<_CreateMembershipDialog> {
   String? _selectedMemberId;
   String? _selectedPlanId;
   final _priceCtrl = TextEditingController();
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now().add(const Duration(days: 30));
-  bool _recordPaymentNow = true;
+  late DateTime _startDate;
+  late DateTime _endDate;
+  bool _recordPaymentNow = false;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     _selectedMemberId = widget.preSelectedMemberId;
+    _startDate = DateUtils.dateOnly(DateTime.now());
+    _endDate = MembershipPlan.endDateForDuration(_startDate, 30);
   }
 
   @override
@@ -2210,7 +2897,39 @@ class _CreateMembershipDialogState extends ConsumerState<_CreateMembershipDialog
     if (_isSaving) return;
     if (_selectedMemberId == null || _selectedPlanId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى اختيار العضو والباقة أولاً', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: const Text('يرجى اختيار العضو والباقة أولاً',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
+      );
+      return;
+    }
+
+    final data = ref.read(dataSyncServiceProvider);
+    if (!data.members.any((member) => member.id == _selectedMemberId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('العضو المحدد غير متاح.'),
+          backgroundColor: context.appPalette.error,
+        ),
+      );
+      return;
+    }
+    final price = double.tryParse(_priceCtrl.text);
+    if (price == null ||
+        !price.isFinite ||
+        price < 0 ||
+        (_recordPaymentNow && price <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _recordPaymentNow
+                ? 'أدخل سعراً أكبر من صفر لتسجيل دفعة.'
+                : 'أدخل سعراً صحيحاً غير سالب.',
+            textDirection: ui.TextDirection.rtl,
+          ),
+          backgroundColor: context.appPalette.error,
+        ),
       );
       return;
     }
@@ -2218,36 +2937,39 @@ class _CreateMembershipDialogState extends ConsumerState<_CreateMembershipDialog
     setState(() => _isSaving = true);
 
     try {
-      final price = double.tryParse(_priceCtrl.text) ?? 0.0;
-      final newMembership = await ref.read(dataSyncServiceProvider.notifier).createMembership(
-            memberId: _selectedMemberId!,
-            planId: _selectedPlanId!,
-            startDate: _startDate,
-            endDate: _endDate,
-            price: price,
-          );
-
-      if (_recordPaymentNow) {
-        await ref.read(dataSyncServiceProvider.notifier).recordPayment(
-              membershipId: newMembership.id,
-              amount: price,
-              paymentMethod: 'cash',
-              paidAt: DateTime.now(),
-              notes: 'دفعة تفعيل اشتراك',
-            );
-      }
+      final result =
+          await ref.read(dataSyncServiceProvider.notifier).createMembership(
+                memberId: _selectedMemberId!,
+                planId: _selectedPlanId!,
+                startDate: _startDate,
+                endDate: _endDate,
+                price: price,
+                initialPaymentAmount: _recordPaymentNow ? price : null,
+                paymentNotes: 'دفعة تفعيل اشتراك',
+              );
 
       if (!mounted) return;
       Navigator.of(context).pop();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تفعيل الاشتراك بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          result.isPending
+              ? 'تم حفظ طلب الاشتراك محلياً، ولم يُؤكد بعد من الخادم.'
+              : 'تم تفعيل الاشتراك بنجاح!',
+          textDirection: ui.TextDirection.rtl,
+        ),
+        backgroundColor: result.isPending
+            ? context.appPalette.warning
+            : context.appPalette.success,
+      ));
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل تفعيل الاشتراك: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('تعذر تفعيل الاشتراك: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -2260,83 +2982,142 @@ class _CreateMembershipDialogState extends ConsumerState<_CreateMembershipDialog
       return Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تنبيه'),
-          content: const Text('الرجاء إضافة عضو واحد على الأقل أولاً لتسجيل اشتراك.'),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+          content: const Text(
+              'الرجاء إضافة عضو واحد على الأقل أولاً لتسجيل اشتراك.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
+          ],
         ),
       );
     }
 
-    if (data.plans.isEmpty) {
+    if (data.activePlans.isEmpty) {
       return Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تنبيه'),
-          content: const Text('الرجاء إضافة باقة أسعار أولاً لتفعيل الاشتراك.'),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+          content: const Text(
+              'لا توجد باقات مفعلة حالياً. فعّل باقة أو أضف باقة جديدة أولاً.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('حسناً'))
+          ],
         ),
       );
     }
 
     _selectedMemberId ??= data.members.first.id;
-    _selectedPlanId ??= data.plans.first.id;
+    if (!data.activePlans.any((plan) => plan.id == _selectedPlanId)) {
+      _selectedPlanId = data.activePlans.first.id;
+      _priceCtrl.text = data.activePlans.first.price.toString();
+    }
     if (_priceCtrl.text.isEmpty) {
-      _priceCtrl.text = data.plans.first.price.toString();
+      _priceCtrl.text = data.activePlans
+          .firstWhere((plan) => plan.id == _selectedPlanId)
+          .price
+          .toString();
     }
 
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        scrollable: true,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تسجيل باقة اشتراك لعضو'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: _selectedMemberId,
-                decoration: const InputDecoration(labelText: 'اختر العضو'),
-                items: data.members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.fullName))).toList(),
-                onChanged: (val) => setState(() => _selectedMemberId = val),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _SearchableMemberPicker(
+              members: data.members,
+              selectedMemberId: _selectedMemberId,
+              allowUnlinked: false,
+              label: 'العضو *',
+              onChanged: (value) => setState(() => _selectedMemberId = value),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: _selectedPlanId,
+              decoration: const InputDecoration(labelText: 'باقة الاشتراك'),
+              items: data.activePlans
+                  .map((p) => DropdownMenuItem(
+                      value: p.id, child: Text('${p.name} (${p.price} ج.م)')))
+                  .toList(),
+              onChanged: (val) {
+                final p = data.activePlans.firstWhere((p) => p.id == val);
+                setState(() {
+                  _selectedPlanId = val;
+                  _priceCtrl.text = p.price.toString();
+                  _endDate = p.endDateFor(_startDate);
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('فترة الاشتراك'),
+              subtitle: Text(
+                'من ${DateFormat('yyyy/MM/dd').format(_startDate)} إلى '
+                '${DateFormat('yyyy/MM/dd').format(_endDate)}',
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedPlanId,
-                decoration: const InputDecoration(labelText: 'باقة الاشتراك'),
-                items: data.plans.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.name} (${p.price} ج.م)'))).toList(),
-                onChanged: (val) {
-                  final p = data.plans.firstWhere((p) => p.id == val);
-                  setState(() {
-                    _selectedPlanId = val;
-                    _priceCtrl.text = p.price.toString();
-                    _endDate = _startDate.add(Duration(days: p.durationDays));
-                  });
-                },
+              trailing: const Icon(Icons.calendar_today_rounded, size: 18),
+              onTap: _isSaving
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _startDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked == null || !mounted) return;
+                      setState(() {
+                        _startDate = DateUtils.dateOnly(picked);
+                        final plan = data.activePlans
+                            .where((plan) => plan.id == _selectedPlanId)
+                            .first;
+                        _endDate = plan.endDateFor(_startDate);
+                      });
+                    },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _priceCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'السعر الفعلي المطلوب (ج.م)'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              title: const Text('تسجيل دفعة كاملة الآن',
+                  style: TextStyle(fontSize: 12)),
+              value: _recordPaymentNow,
+              activeColor: context.appPalette.primary,
+              contentPadding: EdgeInsets.zero,
+              subtitle: const Text(
+                'سيتم إنشاء سجل دفع بمبلغ سعر الاشتراك فقط عند التأكيد.',
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _priceCtrl,
-                decoration: const InputDecoration(labelText: 'السعر الفعلي المطلوب (ج.م)'),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                title: const Text('تسجيل استلام الدفعة نقداً فوراً', style: TextStyle(fontSize: 12)),
-                value: _recordPaymentNow,
-                activeColor: AppColors.primary,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) => setState(() => _recordPaymentNow = v ?? true),
-              ),
-            ],
-          ),
+              onChanged: _isSaving
+                  ? null
+                  : (v) => setState(() => _recordPaymentNow = v ?? false),
+            ),
+          ],
         ),
         actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('تفعيل الاشتراك'),
+            child: _isSaving
+                ? const CircularProgressIndicator()
+                : const Text('تفعيل الاشتراك'),
           ),
         ],
       ),
@@ -2358,7 +3139,10 @@ class _PaymentsTab extends ConsumerWidget {
       children: [
         Expanded(
           child: data.payments.isEmpty
-              ? const Center(child: Text('لا توجد مدفوعات مسجلة حالياً.', style: TextStyle(color: AppColors.textSecondary)))
+              ? Center(
+                  child: Text('لا توجد مدفوعات مسجلة حالياً.',
+                      style:
+                          TextStyle(color: context.appPalette.textSecondary)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: data.payments.length,
@@ -2366,60 +3150,96 @@ class _PaymentsTab extends ConsumerWidget {
                     final payment = data.payments[index];
 
                     return Card(
-                      color: AppColors.surfaceCard,
+                      color: context.appPalette.surfaceCard,
                       margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  payment.notes ?? 'إيصال دفع',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
-                                const SizedBox(height: 3),
-                                Text('سجّل الدفعة: ${data.creatorName(payment.recordedBy)}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  RtlSupport.formatEgp(payment.amount),
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.success),
-                                ),
-                              ],
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    payment.notes ?? 'إيصال دفع',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                      'سجّل الدفعة: ${data.creatorName(payment.recordedBy)}',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: context.appPalette.textMuted)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    RtlSupport.formatEgp(payment.amount),
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                        color: context.appPalette.success),
+                                  ),
+                                ],
+                              ),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  'طريقة الدفع: ${payment.paymentMethod == "cash" ? "نقدي" : "بطاقة/تحويل"}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(RtlSupport.formatDate(payment.paidAt), style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_rounded, color: AppColors.textSecondary, size: 18),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                      onPressed: () {
-                                        showDialog(context: context, builder: (_) => _EditPaymentDialog(payment: payment));
-                                      },
-                                    ),
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_rounded, color: AppColors.error, size: 18),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                      onPressed: () => _confirmDeletePayment(context, ref, payment),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'طريقة الدفع: ${payment.paymentMethod == "cash" ? "نقدي" : "بطاقة/تحويل"}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.end,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(RtlSupport.formatDate(payment.paidAt),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: context.appPalette.textMuted)),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.edit_rounded,
+                                            color: context
+                                                .appPalette.textSecondary,
+                                            size: 18),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                            minWidth: 48, minHeight: 48),
+                                        onPressed: () {
+                                          showDialog(
+                                              context: context,
+                                              builder: (_) =>
+                                                  _EditPaymentDialog(
+                                                      payment: payment));
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete_rounded,
+                                            color: context.appPalette.error,
+                                            size: 18),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                            minWidth: 48, minHeight: 48),
+                                        onPressed: () => _confirmDeletePayment(
+                                            context, ref, payment),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -2430,41 +3250,57 @@ class _PaymentsTab extends ConsumerWidget {
         ),
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            onPressed: () {
-              showDialog(context: context, builder: (_) => const _RecordPaymentDialog());
-            },
-            icon: const Icon(Icons.add_reaction_rounded),
-            label: const Text('تسجيل إيراد / دفعة مستلمة'),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showDialog<void>(
+                    context: context,
+                    builder: (_) => const _RecordPaymentDialog());
+              },
+              icon: const Icon(Icons.add_reaction_rounded),
+              label: const Text('تسجيل إيراد / دفعة مستلمة'),
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _confirmDeletePayment(BuildContext context, WidgetRef ref, Payment payment) {
+  void _confirmDeletePayment(
+      BuildContext context, WidgetRef ref, Payment payment) {
     showDialog(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تأكيد حذف الدفعة المالية'),
-          content: Text('تحذير مالي: هل تريد تأكيد حذف هذه الدفعة بقيمة (${RtlSupport.formatEgp(payment.amount)})؟ سيؤثر هذا على إجمالي إيرادات الخزينة.'),
+          content: Text(
+              'تحذير مالي: هل تريد تأكيد حذف هذه الدفعة بقيمة (${RtlSupport.formatEgp(payment.amount)})؟ سيؤثر هذا على إجمالي إيرادات الخزينة.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('تراجع')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('تراجع')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await ref.read(dataSyncServiceProvider.notifier).deletePayment(payment.id);
+                await ref
+                    .read(dataSyncServiceProvider.notifier)
+                    .deletePayment(payment.id);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم حذف الدفعة المالية بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+                    SnackBar(
+                        content: Text('تم حذف الدفعة المالية بنجاح!',
+                            textDirection: ui.TextDirection.rtl),
+                        backgroundColor: context.appPalette.success),
                   );
                 }
               },
-              child: const Text('تأكيد الحذف', style: TextStyle(color: Colors.white)),
+              child: const Text('تأكيد الحذف',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -2524,13 +3360,19 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث الدفعة المالية بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تم تحديث الدفعة المالية بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ أثناء التعديل: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('خطأ أثناء التعديل: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -2540,7 +3382,7 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تعديل الدفعة المالية'),
         content: Form(
           key: _formKey,
@@ -2550,10 +3392,12 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
               children: [
                 TextFormField(
                   controller: _amountCtrl,
-                  decoration: const InputDecoration(labelText: 'المبلغ المستلم (ج.م) *'),
+                  decoration: const InputDecoration(
+                      labelText: 'المبلغ المستلم (ج.م) *'),
                   keyboardType: TextInputType.number,
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'المبلغ مطلوب';
+                    if (val == null || val.trim().isEmpty)
+                      return 'المبلغ مطلوب';
                     final parsed = double.tryParse(val);
                     if (parsed == null || parsed <= 0) return 'أدخل مبلغ صحيح';
                     return null;
@@ -2561,20 +3405,25 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _method,
+                  initialValue: _method,
                   decoration: const InputDecoration(labelText: 'طريقة الدفع'),
                   items: const [
                     DropdownMenuItem(value: 'cash', child: Text('نقدي كاش')),
-                    DropdownMenuItem(value: 'vodafone_cash', child: Text('فودافون كاش / محفظة')),
-                    DropdownMenuItem(value: 'instapay', child: Text('إنستاباي (InstaPay)')),
-                    DropdownMenuItem(value: 'card', child: Text('بطاقة بنكية / فيزا')),
+                    DropdownMenuItem(
+                        value: 'vodafone_cash',
+                        child: Text('فودافون كاش / محفظة')),
+                    DropdownMenuItem(
+                        value: 'instapay', child: Text('إنستاباي (InstaPay)')),
+                    DropdownMenuItem(
+                        value: 'card', child: Text('بطاقة بنكية / فيزا')),
                   ],
                   onChanged: (val) => setState(() => _method = val ?? 'cash'),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _notesCtrl,
-                  decoration: const InputDecoration(labelText: 'ملاحظات الإيصال'),
+                  decoration:
+                      const InputDecoration(labelText: 'ملاحظات الإيصال'),
                   maxLines: 2,
                 ),
               ],
@@ -2589,7 +3438,11 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
             child: _isSaving
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black))
                 : const Text('حفظ التعديل'),
           ),
         ],
@@ -2601,21 +3454,226 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
 // ==========================================
 // --- RECORD PAYMENT DIALOG ---
 // ==========================================
+class _MemberSelectionResult {
+  final String? memberId;
+
+  const _MemberSelectionResult(this.memberId);
+}
+
+class _SearchableMemberPicker extends StatefulWidget {
+  final List<Member> members;
+  final String? selectedMemberId;
+  final ValueChanged<String?> onChanged;
+  final bool allowUnlinked;
+  final String label;
+
+  const _SearchableMemberPicker({
+    required this.members,
+    required this.selectedMemberId,
+    required this.onChanged,
+    this.allowUnlinked = true,
+    this.label = 'العضو المسدد (اختياري)',
+  });
+
+  @override
+  State<_SearchableMemberPicker> createState() =>
+      _SearchableMemberPickerState();
+}
+
+class _SearchableMemberPickerState extends State<_SearchableMemberPicker> {
+  Future<void> _openMemberSearch() async {
+    final result = await showDialog<_MemberSelectionResult>(
+      context: context,
+      builder: (_) => _MemberSearchDialog(
+        members: widget.members,
+        allowUnlinked: widget.allowUnlinked,
+      ),
+    );
+    if (result != null) widget.onChanged(result.memberId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedMember = widget.members
+        .where((member) => member.id == widget.selectedMemberId)
+        .firstOrNull;
+    final selectedUnavailable =
+        widget.selectedMemberId != null && selectedMember == null;
+
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: widget.label,
+        suffixIcon: IconButton(
+          tooltip: 'بحث عن عضو',
+          onPressed: _openMemberSearch,
+          icon: const Icon(Icons.search_rounded),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: _openMemberSearch,
+              child: Text(
+                selectedMember == null
+                    ? selectedUnavailable
+                        ? 'العضو المحدد غير متاح'
+                        : widget.allowUnlinked
+                            ? 'دفعة عامة بدون ربط بعضو'
+                            : 'اختر عضواً'
+                    : [
+                        selectedMember.fullName,
+                        if (selectedMember.phone?.isNotEmpty == true)
+                          selectedMember.phone!,
+                      ].join(' • '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          if (widget.selectedMemberId != null)
+            IconButton(
+              tooltip: 'إزالة ربط العضو',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: () => widget.onChanged(null),
+              icon: const Icon(Icons.close_rounded),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberSearchDialog extends StatefulWidget {
+  final List<Member> members;
+  final bool allowUnlinked;
+
+  const _MemberSearchDialog({
+    required this.members,
+    required this.allowUnlinked,
+  });
+
+  @override
+  State<_MemberSearchDialog> createState() => _MemberSearchDialogState();
+}
+
+class _MemberSearchDialogState extends State<_MemberSearchDialog> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matchingMembers = widget.members
+        .where((member) => memberMatchesSearch(member, _query))
+        .toList();
+
+    final media = MediaQuery.of(context);
+    final availableHeight = (media.size.height - media.viewInsets.bottom - 32)
+        .clamp(0.0, 560.0)
+        .toDouble();
+
+    return Directionality(
+      textDirection: ui.TextDirection.rtl,
+      child: Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 420,
+            maxHeight: availableHeight,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  widget.allowUnlinked ? 'اختر العضو المسدد' : 'اختر العضو',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                    labelText: 'بحث بالاسم أو رقم الهاتف',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: matchingMembers.isEmpty
+                      ? const Center(
+                          child: Text('لا يوجد عضو مطابق لبحثك.'),
+                        )
+                      : ListView.builder(
+                          itemCount: matchingMembers.length,
+                          itemBuilder: (context, index) {
+                            final member = matchingMembers[index];
+                            return ListTile(
+                              title: Text(
+                                member.fullName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle:
+                                  Text(member.phone ?? 'لا يوجد رقم هاتف'),
+                              onTap: () => Navigator.of(context).pop(
+                                _MemberSelectionResult(member.id),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                if (widget.allowUnlinked)
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context)
+                            .pop(const _MemberSelectionResult(null)),
+                        child: const Text('دفعة عامة بدون ربط بعضو'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('إلغاء'),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RecordPaymentDialog extends ConsumerStatefulWidget {
   final String? preSelectedMemberId;
 
   const _RecordPaymentDialog({this.preSelectedMemberId});
 
   @override
-  ConsumerState<_RecordPaymentDialog> createState() => _RecordPaymentDialogState();
+  ConsumerState<_RecordPaymentDialog> createState() =>
+      _RecordPaymentDialogState();
 }
 
 class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
-  final _notesCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
+  final _paymentId = const Uuid().v4();
+  final _paidAt = DateTime.now();
   String _method = 'cash';
   String? _selectedMemberId;
+  String? _selectedMembershipId;
+  String? _selectedPlanId;
   bool _isSaving = false;
 
   @override
@@ -2627,7 +3685,7 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
   @override
   void dispose() {
     _amountCtrl.dispose();
-    _notesCtrl.dispose();
+    _descriptionCtrl.dispose();
     super.dispose();
   }
 
@@ -2643,35 +3701,65 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
       String? memberName;
 
       if (_selectedMemberId != null) {
-        final member = data.members.where((m) => m.id == _selectedMemberId).firstOrNull;
-        memberName = member?.fullName;
-        final mem = data.memberships.where((m) => m.memberId == _selectedMemberId && !m.isExpired).firstOrNull;
-        linkedMembershipId = mem?.id;
+        final member =
+            data.members.where((m) => m.id == _selectedMemberId).firstOrNull;
+        if (member == null) {
+          throw StateError('العضو المحدد لم يعد متاحاً.');
+        }
+        memberName = member.fullName;
+        final selectedMembership = data.memberships
+            .where((membership) =>
+                membership.id == _selectedMembershipId &&
+                membership.memberId == _selectedMemberId &&
+                membership.status == 'active' &&
+                membership.deletedAt == null)
+            .firstOrNull;
+        if (_selectedMembershipId != null && selectedMembership == null) {
+          throw StateError('الاشتراك المحدد لم يعد متاحاً.');
+        }
+        linkedMembershipId = selectedMembership?.id;
       }
 
-      final noteText = _notesCtrl.text.isNotEmpty
-          ? _notesCtrl.text
-          : (memberName != null ? 'دفعة للعضو: $memberName' : null);
+      final selectedPlan = data.activePlans
+          .where((plan) => plan.id == _selectedPlanId)
+          .firstOrNull;
+      if (_selectedPlanId != null && selectedPlan == null) {
+        throw StateError('الباقة المحددة لم تعد متاحة.');
+      }
+      final noteText = [
+        if (memberName != null && linkedMembershipId == null)
+          'العضو: $memberName',
+        if (selectedPlan != null) 'الباقة: ${selectedPlan.name}',
+        if (_descriptionCtrl.text.trim().isNotEmpty)
+          _descriptionCtrl.text.trim(),
+      ].join(' • ');
 
       await ref.read(dataSyncServiceProvider.notifier).recordPayment(
+            paymentId: _paymentId,
             membershipId: linkedMembershipId,
             amount: double.parse(_amountCtrl.text),
             paymentMethod: _method,
-            paidAt: DateTime.now(),
-            notes: noteText,
+            paidAt: _paidAt,
+            notes: noteText.isEmpty ? null : noteText,
           );
 
       if (!mounted) return;
       Navigator.of(context).pop();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تسجيل الدفعة بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: const Text('تم تسجيل الدفعة بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل تسجيل الدفعة: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('فشل تسجيل الدفعة: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -2679,60 +3767,158 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(dataSyncServiceProvider);
+    final selectedMemberMemberships = data.memberships
+        .where((membership) =>
+            membership.memberId == _selectedMemberId &&
+            membership.status == 'active' &&
+            membership.deletedAt == null)
+        .toList();
+    if (!selectedMemberMemberships
+        .any((membership) => membership.id == _selectedMembershipId)) {
+      _selectedMembershipId = null;
+    }
 
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        scrollable: true,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تسجيل دفعة إيراد جديدة'),
         content: Form(
           key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (data.members.isNotEmpty)
-                  DropdownButtonFormField<String>(
-                    value: _selectedMemberId,
-                    decoration: const InputDecoration(labelText: 'اختر العضو المسدد (اختياري)'),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('دفعة عامة بدون ربط بعضو')),
-                      ...data.members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.fullName))),
-                    ],
-                    onChanged: (val) => setState(() => _selectedMemberId = val),
-                  ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _amountCtrl,
-                  decoration: const InputDecoration(labelText: 'قيمة المبلغ المستلم (ج.م) *'),
-                  keyboardType: TextInputType.number,
-                  validator: (v) => v == null || double.tryParse(v) == null ? 'أدخل مبلغ صحيح' : null,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (data.members.isNotEmpty || _selectedMemberId != null)
+                _SearchableMemberPicker(
+                  members: data.members,
+                  selectedMemberId: _selectedMemberId,
+                  onChanged: (value) => setState(() {
+                    _selectedMemberId = value;
+                    _selectedMembershipId = null;
+                  }),
                 ),
-                const SizedBox(height: 12),
+              const SizedBox(height: 12),
+              if (_selectedMemberId != null)
                 DropdownButtonFormField<String>(
-                  value: _method,
-                  decoration: const InputDecoration(labelText: 'طريقة الدفع'),
-                  items: const [
-                    DropdownMenuItem(value: 'cash', child: Text('نقدي (Cash)')),
-                    DropdownMenuItem(value: 'card', child: Text('فيزا / شبكة (Card)')),
-                    DropdownMenuItem(value: 'vodafone_cash', child: Text('فودافون كاش / محفظة')),
+                  isExpanded: true,
+                  initialValue: _selectedMembershipId ?? '',
+                  decoration: const InputDecoration(
+                    labelText: 'ربط باشتراك قائم (اختياري)',
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('دفعة عامة للعضو'),
+                    ),
+                    ...selectedMemberMemberships.map((membership) {
+                      final planName = data.plans
+                          .where((plan) => plan.id == membership.planId)
+                          .firstOrNull
+                          ?.name;
+                      final label = planName == null
+                          ? 'اشتراك حتى ${RtlSupport.formatDate(membership.endDate)}'
+                          : '$planName • ${RtlSupport.formatDate(membership.endDate)}';
+                      return DropdownMenuItem(
+                        value: membership.id,
+                        child: Text(label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      );
+                    }),
                   ],
-                  onChanged: (val) => setState(() => _method = val!),
+                  onChanged: (value) => setState(
+                    () => _selectedMembershipId =
+                        value == null || value.isEmpty ? null : value,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _notesCtrl,
-                  decoration: const InputDecoration(labelText: 'ملاحظات وتفاصيل الدفع'),
+              if (_selectedMemberId != null) const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _selectedPlanId ?? '',
+                decoration: const InputDecoration(
+                  labelText: 'الباقة (اختيارية، لا تنشئ اشتراكاً)',
                 ),
-              ],
-            ),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('بدون باقة'),
+                  ),
+                  ...data.activePlans.map(
+                    (plan) => DropdownMenuItem(
+                      value: plan.id,
+                      child: Text('${plan.name} (${plan.price} ج.م)',
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(
+                  () => _selectedPlanId =
+                      value == null || value.isEmpty ? null : value,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(
+                    labelText: 'قيمة المبلغ المستلم (ج.م) *'),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  final amount = double.tryParse(value ?? '');
+                  return amount == null || !amount.isFinite || amount <= 0
+                      ? 'أدخل مبلغاً أكبر من صفر'
+                      : null;
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _method,
+                decoration: const InputDecoration(labelText: 'طريقة الدفع'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'cash',
+                    child: Text('نقدي (Cash)',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: 'card',
+                    child: Text('فيزا / شبكة (Card)',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: 'vodafone_cash',
+                    child: Text('فودافون كاش / محفظة',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _method = val);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _descriptionCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'وصف أو ملاحظات إضافية'),
+                maxLines: 2,
+              ),
+            ],
           ),
         ),
         actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+              child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('تسجيل الدفعة'),
+            child: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('تسجيل الدفعة'),
           ),
         ],
       ),
@@ -2750,153 +3936,180 @@ class _SettingsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authNotifierProvider);
     final syncService = ref.watch(dataSyncServiceProvider);
+    final selectedTheme = ref.watch(appThemeProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('معلومات الصالة الرياضية (جيم الديب)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              if (auth.profile?.isOwner == true)
-                TextButton.icon(
-                  onPressed: () {
-                    showDialog(context: context, builder: (_) => _EditGymInfoDialog(gym: auth.gym));
-                  },
-                  icon: const Icon(Icons.edit_rounded, size: 16),
-                  label: const Text('تعديل بيانات الجيم'),
-                ),
-            ],
+          _buildSectionHeader(
+            'معلومات الصالة الرياضية (جيم الديب)',
+            TextButton.icon(
+              onPressed: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => _EditGymInfoDialog(gym: auth.gym),
+                );
+              },
+              icon: const Icon(Icons.edit_rounded, size: 16),
+              label: const Text('تعديل بيانات الجيم'),
+            ),
           ),
           const SizedBox(height: 8),
           Card(
-            color: AppColors.surfaceCard,
+            color: context.appPalette.surfaceCard,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  _buildSettingRow('اسم الصالة (العربي)', auth.gym?.name ?? 'جيم الديب'),
+                  _buildSettingRow(context, 'اسم الصالة (العربي)',
+                      auth.gym?.name ?? 'جيم الديب'),
                   const Divider(),
-                  _buildSettingRow('اسم الصالة (English)', 'Gym ElDeeb'),
-                  const Divider(),
-                  _buildSettingRow('رقم هاتف الصالة', auth.gym?.phone ?? 'غير مسجل'),
-                  const Divider(),
-                  _buildSettingRow('العملة المعتمدة', auth.gym?.currency ?? 'EGP'),
+                  _buildSettingRow(
+                      context, 'اسم الصالة (English)', 'Gym ElDeeb'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceCard.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.surfaceBorder),
-            ),
-            child: const Text(
-              'ملاحظة: مخطط قاعدة البيانات الحالي لجدول gyms لا يحتوي على حقل للعنوان/الموقع الجغرافي. تم الالتزام بالمخطط الرسمي وعدم اختلاق أعمدة غير متوافقة.',
-              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-            ),
-          ),
           const SizedBox(height: 20),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('الملف الشخصي للكابتن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              TextButton.icon(
-                onPressed: () {
-                  showDialog(context: context, builder: (_) => _EditProfileDialog(profile: auth.profile));
-                },
-                icon: const Icon(Icons.edit_rounded, size: 16),
-                label: const Text('تعديل الاسم'),
-              ),
-            ],
+          _buildSectionHeader(
+            'الملف الشخصي للكابتن',
+            TextButton.icon(
+              onPressed: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => _EditProfileDialog(profile: auth.profile),
+                );
+              },
+              icon: const Icon(Icons.edit_rounded, size: 16),
+              label: const Text('تعديل الاسم'),
+            ),
           ),
           const SizedBox(height: 8),
           Card(
-            color: AppColors.surfaceCard,
+            color: context.appPalette.surfaceCard,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  _buildSettingRow('الاسم بالكامل', auth.profile?.fullName ?? 'كابتن الصالة'),
-                  const Divider(),
-                  _buildSettingRow('الصلاحية (ثابتة RLS)', auth.profile?.isOwner == true ? 'مالك الصالة الرياضية (Owner)' : 'مدرب معتمد (Coach)'),
-                  const Divider(),
-                  _buildSettingRow('معرف الحساب (User ID)', auth.profile?.id ?? 'غير متوفر'),
+                  _buildSettingRow(context, 'الاسم بالكامل',
+                      auth.profile?.fullName ?? 'كابتن الصالة'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 20),
-
-          const Text('المظهر واللغة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const Text('المظهر واللغة',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 8),
           Card(
-            color: AppColors.surfaceCard,
+            color: context.appPalette.surfaceCard,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  _buildSettingRow('المظهر', 'الوضع الداكن الذهبي (جيم الديب)'),
-                  const Divider(),
-                  _buildSettingRow('اللغة', 'العربية (افتراضي) / English'),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('حالة تحديث البيانات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              TextButton.icon(
-                onPressed: () async {
-                  final sync = ref.read(dataSyncServiceProvider.notifier);
-                  await sync.syncAll(forceRetry: true);
-                  if (!context.mounted) return;
-
-                  final state = ref.read(dataSyncServiceProvider);
-                  final message = state.syncStatus == SyncStatus.synced
-                      ? 'تمت مزامنة البيانات بنجاح.'
-                      : (state.syncErrorMessage ?? 'تعذرت المزامنة، راجع البيانات أو الصلاحيات.');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(message, textDirection: ui.TextDirection.rtl),
-                      backgroundColor: state.syncStatus == SyncStatus.synced
-                          ? AppColors.success
-                          : AppColors.error,
+                  RadioGroup<AppThemeVariant>(
+                    groupValue: selectedTheme,
+                    onChanged: (variant) => _saveTheme(context, ref, variant),
+                    child: const Column(
+                      children: [
+                        RadioListTile<AppThemeVariant>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('داكن وذهبي'),
+                          value: AppThemeVariant.darkGold,
+                        ),
+                        RadioListTile<AppThemeVariant>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('داكن وأزرق'),
+                          value: AppThemeVariant.darkBlue,
+                        ),
+                        RadioListTile<AppThemeVariant>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('المظهر الفاتح'),
+                          value: AppThemeVariant.light,
+                        ),
+                        RadioListTile<AppThemeVariant>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('داكن وبنفسجي'),
+                          value: AppThemeVariant.darkPurple,
+                        ),
+                        RadioListTile<AppThemeVariant>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('داكن وأخضر'),
+                          value: AppThemeVariant.darkGreen,
+                        ),
+                        RadioListTile<AppThemeVariant>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('محايد وعصري'),
+                          value: AppThemeVariant.neutral,
+                        ),
+                      ],
                     ),
-                  );
-                },
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('مزامنة فورية'),
+                  ),
+                  const Divider(),
+                  _buildSettingRow(context, 'اللغة', 'العربية (افتراضي)'),
+                ],
               ),
-            ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildSectionHeader(
+            'حالة تحديث البيانات',
+            TextButton.icon(
+              onPressed: () async {
+                final sync = ref.read(dataSyncServiceProvider.notifier);
+                await sync.syncAll(forceRetry: true);
+                if (!context.mounted) return;
+
+                final state = ref.read(dataSyncServiceProvider);
+                final message = state.syncStatus == SyncStatus.synced
+                    ? 'تمت مزامنة البيانات بنجاح.'
+                    : (state.syncErrorMessage ??
+                        'تعذرت المزامنة، راجع البيانات أو الصلاحيات.');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(message, textDirection: ui.TextDirection.rtl),
+                    backgroundColor: state.syncStatus == SyncStatus.synced
+                        ? context.appPalette.success
+                        : context.appPalette.error,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('مزامنة فورية'),
+            ),
           ),
           const SizedBox(height: 8),
           Card(
-            color: AppColors.surfaceCard,
+            color: context.appPalette.surfaceCard,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  _buildSettingRow('الاتصال بالإنترنت', syncService.isOffline ? 'غير متصل (Offline)' : 'متصل بالشبكة (Online)'),
+                  _buildSettingRow(
+                      context,
+                      'الاتصال بالإنترنت',
+                      syncService.isOffline
+                          ? 'غير متصل (Offline)'
+                          : 'متصل بالشبكة (Online)'),
                   const Divider(),
-                  _buildSettingRow('حالة تحديث البيانات', syncService.syncStatus == SyncStatus.synced ? 'مكتملة ومؤمنة (Synced)' : 'في انتظار التحديث / جاري التحديث'),
+                  _buildSettingRow(
+                      context,
+                      'حالة تحديث البيانات',
+                      syncService.syncStatus == SyncStatus.synced
+                          ? 'مكتملة ومؤمنة (Synced)'
+                          : 'في انتظار التحديث / جاري التحديث'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 32),
-
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: context.appPalette.error,
+                foregroundColor: Colors.white),
             onPressed: () => _confirmLogout(context, ref),
             icon: const Icon(Icons.logout_rounded),
             label: const Text('تسجيل خروج آمن من الجلسة'),
@@ -2906,7 +4119,37 @@ class _SettingsTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildSettingRow(String label, String value) {
+  Widget _buildSectionHeader(String title, Widget? action) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final heading = Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        );
+        if (action == null) return heading;
+        if (constraints.maxWidth < 380) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              heading,
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: action,
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: heading),
+            action,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSettingRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Column(
@@ -2914,16 +4157,17 @@ class _SettingsTab extends ConsumerWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            style: TextStyle(
+                color: context.appPalette.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 4),
           SelectableText(
             value,
             textAlign: TextAlign.start,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: AppColors.textPrimary,
+              color: context.appPalette.textPrimary,
             ),
           ),
         ],
@@ -2937,19 +4181,24 @@ class _SettingsTab extends ConsumerWidget {
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: AppColors.surfaceCard,
+          backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تسجيل الخروج'),
-          content: const Text('هل تريد تأكيد تسجيل الخروج من جيم الديب ومسح بيانات الجلسة محلياً؟'),
+          content: const Text(
+              'هل تريد تأكيد تسجيل الخروج من جيم الديب ومسح بيانات الجلسة محلياً؟'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
                 await ref.read(authNotifierProvider.notifier).signOut();
                 if (context.mounted) context.go('/login');
               },
-              child: const Text('تأكيد الخروج', style: TextStyle(color: Colors.white)),
+              child: const Text('تأكيد الخروج',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -2973,23 +4222,17 @@ class _EditGymInfoDialog extends ConsumerStatefulWidget {
 class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _phoneCtrl;
-  late final TextEditingController _currencyCtrl;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.gym?.name ?? 'جيم الديب');
-    _phoneCtrl = TextEditingController(text: widget.gym?.phone ?? '');
-    _currencyCtrl = TextEditingController(text: widget.gym?.currency ?? 'EGP');
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _currencyCtrl.dispose();
     super.dispose();
   }
 
@@ -3001,20 +4244,24 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
     try {
       await ref.read(dataSyncServiceProvider.notifier).updateGymInfo(
             name: _nameCtrl.text.trim(),
-            phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-            currency: _currencyCtrl.text.trim(),
           );
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث بيانات الصالة الرياضية بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تم تحديث بيانات الصالة الرياضية بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ أثناء التعديل: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('خطأ أثناء التعديل: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -3024,7 +4271,8 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        scrollable: true,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تعديل بيانات جيم الديب'),
         content: Form(
           key: _formKey,
@@ -3035,23 +4283,9 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
                 TextFormField(
                   controller: _nameCtrl,
                   decoration: const InputDecoration(labelText: 'اسم الصالة *'),
-                  validator: (val) => val == null || val.trim().isEmpty ? 'اسم الصالة مطلوب' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _phoneCtrl,
-                  decoration: const InputDecoration(labelText: 'رقم هاتف الصالة'),
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _currencyCtrl,
-                  decoration: const InputDecoration(labelText: 'العملة المعتمدة'),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'ملاحظة: جدول gyms لا يحتوي على حقل للعنوان في قاعدة البيانات الحالية.',
-                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  validator: (val) => val == null || val.trim().isEmpty
+                      ? 'اسم الصالة مطلوب'
+                      : null,
                 ),
               ],
             ),
@@ -3065,7 +4299,11 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
             child: _isSaving
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black))
                 : const Text('حفظ البيانات'),
           ),
         ],
@@ -3109,18 +4347,26 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
 
     setState(() => _isSaving = true);
     try {
-      await ref.read(dataSyncServiceProvider.notifier).updateProfileName(_nameCtrl.text.trim());
+      await ref
+          .read(dataSyncServiceProvider.notifier)
+          .updateProfileName(_nameCtrl.text.trim());
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث الاسم بنجاح!', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('تم تحديث الاسم بنجاح!',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ أثناء التعديل: $e', textDirection: ui.TextDirection.rtl), backgroundColor: AppColors.error),
+        SnackBar(
+            content: Text('خطأ أثناء التعديل: $e',
+                textDirection: ui.TextDirection.rtl),
+            backgroundColor: context.appPalette.error),
       );
     }
   }
@@ -3130,24 +4376,29 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
+        backgroundColor: context.appPalette.surfaceCard,
         title: const Text('تعديل الاسم في الملف الشخصي'),
         content: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(labelText: 'الاسم الكامل للكابتن *'),
-                validator: (val) => val == null || val.trim().isEmpty ? 'الاسم مطلوب' : null,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'الرتبة (${widget.profile?.role ?? "coach"}) ومعرف الجيم محمية بقواعد الأمان RLS ولا يمكن تعديلها.',
-                style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nameCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'الاسم الكامل للكابتن *'),
+                  validator: (val) =>
+                      val == null || val.trim().isEmpty ? 'الاسم مطلوب' : null,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'الرتبة (${widget.profile?.role ?? "coach"}) ومعرف الجيم محمية بقواعد الأمان RLS ولا يمكن تعديلها.',
+                  style: TextStyle(
+                      fontSize: 10, color: context.appPalette.textMuted),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -3158,7 +4409,11 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
           ElevatedButton(
             onPressed: _isSaving ? null : _handleSave,
             child: _isSaving
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black))
                 : const Text('حفظ الاسم'),
           ),
         ],
@@ -3170,165 +4425,12 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
 // ==========================================
 // --- ADD MEMBERSHIP DIALOG ---
 // ==========================================
-class _AddMembershipDialog extends ConsumerStatefulWidget {
-  final String? preSelectedMemberId;
-
-  const _AddMembershipDialog({this.preSelectedMemberId});
-
-  @override
-  ConsumerState<_AddMembershipDialog> createState() => _AddMembershipDialogState();
-}
-
-class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
-  final _formKey = GlobalKey<FormState>();
-  String? _selectedMemberId;
-  String? _selectedPlanId;
-  final DateTime _startDate = DateTime.now();
-  final _priceCtrl = TextEditingController();
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedMemberId = widget.preSelectedMemberId;
-  }
-
-  @override
-  void dispose() {
-    _priceCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleSave() async {
-    if (_isSaving) return;
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedMemberId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى اختيار العضو', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
-      );
-      return;
-    }
-    if (_selectedPlanId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى اختيار الباقة', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
-    var membershipCreated = false;
-    try {
-      final data = ref.read(dataSyncServiceProvider);
-      final plan = data.plans.where((p) => p.id == _selectedPlanId).firstOrNull;
-      final durationDays = plan?.durationDays ?? 30;
-      final price = double.tryParse(_priceCtrl.text) ?? plan?.price ?? 0.0;
-      final endDate = _startDate.add(Duration(days: durationDays));
-
-      final membership = await ref.read(dataSyncServiceProvider.notifier).createMembership(
-            memberId: _selectedMemberId!,
-            planId: _selectedPlanId,
-            startDate: _startDate,
-            endDate: endDate,
-            price: price,
-          );
-      membershipCreated = true;
-
-      // The form labels this value as the amount paid, so keep the cash ledger
-      // consistent with the membership created from the same submission.
-      if (price > 0) {
-        await ref.read(dataSyncServiceProvider.notifier).recordPayment(
-              membershipId: membership.id,
-              amount: price,
-              paymentMethod: 'cash',
-              paidAt: DateTime.now(),
-              notes: 'دفعة تفعيل اشتراك',
-            );
-      }
-
-      if (!mounted) return;
-      Navigator.of(context).pop();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تسجيل الاشتراك بنجاح!', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.success),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      if (membershipCreated) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم إنشاء الاشتراك، لكن تعذّر تسجيل الدفعة. راجع سجل المدفوعات قبل إعادة التسجيل. ($e)', textDirection: ui.TextDirection.rtl),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 7),
-          ),
-        );
-      } else {
-        setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل تسجيل الاشتراك: $e', textDirection: ui.TextDirection.ltr), backgroundColor: AppColors.error),
-        );
-      }
-    }
-  }
+class _AddMembershipDialog extends StatelessWidget {
+  const _AddMembershipDialog();
 
   @override
   Widget build(BuildContext context) {
-    final data = ref.watch(dataSyncServiceProvider);
-    return Directionality(
-      textDirection: ui.TextDirection.rtl,
-      child: AlertDialog(
-        backgroundColor: AppColors.surfaceCard,
-        title: const Text('تسجيل اشتراك جديد'),
-        content: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: _selectedMemberId,
-                  decoration: const InputDecoration(labelText: 'العضو *'),
-                  items: data.members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.fullName))).toList(),
-                  onChanged: (v) => setState(() => _selectedMemberId = v),
-                  validator: (v) => v == null ? 'يرجى اختيار العضو' : null,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _selectedPlanId,
-                  decoration: const InputDecoration(labelText: 'الباقة *'),
-                  items: data.plans.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.name} (${p.price} ج.م)'))).toList(),
-                  onChanged: (v) {
-                    setState(() {
-                      _selectedPlanId = v;
-                      final plan = data.plans.where((p) => p.id == v).firstOrNull;
-                      if (plan != null) {
-                        _priceCtrl.text = plan.price.toString();
-                      }
-                    });
-                  },
-                  validator: (v) => v == null ? 'يرجى اختيار الباقة' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _priceCtrl,
-                  decoration: const InputDecoration(labelText: 'المبلغ المدفوع (ج.م)'),
-                  keyboardType: TextInputType.number,
-                  validator: (v) => v == null || double.tryParse(v) == null ? 'أدخل مبلغ صحيح' : null,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: _isSaving ? null : () => Navigator.of(context).pop(), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving ? const CircularProgressIndicator() : const Text('تسجيل'),
-          ),
-        ],
-      ),
-    );
+    return const _CreateMembershipDialog();
   }
 }
 
@@ -3338,7 +4440,7 @@ class _AddMembershipDialogState extends ConsumerState<_AddMembershipDialog> {
 class _AddPaymentDialog extends StatelessWidget {
   final String? preSelectedMemberId;
 
-  const _AddPaymentDialog({super.key, this.preSelectedMemberId});
+  const _AddPaymentDialog() : preSelectedMemberId = null;
 
   @override
   Widget build(BuildContext context) {

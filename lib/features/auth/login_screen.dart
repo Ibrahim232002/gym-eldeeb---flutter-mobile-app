@@ -63,7 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             textDirection: TextDirection.rtl,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: AppColors.error,
+          backgroundColor: context.appPalette.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -92,7 +92,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     'تسجيل الدخول للمدربين والمالكين',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.textPrimary,
+                          color: context.appPalette.textPrimary,
                         ),
                   ),
                   const SizedBox(height: 8),
@@ -108,14 +108,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.15),
+                        color: context.appPalette.error.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.error.withOpacity(0.4)),
+                        border: Border.all(
+                            color: context.appPalette.error
+                                .withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded,
-                              color: AppColors.error, size: 20),
+                          Icon(Icons.error_outline_rounded,
+                              color: context.appPalette.error, size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -166,7 +168,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         _obscurePassword
                             ? Icons.visibility_off_outlined
                             : Icons.visibility_outlined,
-                        color: AppColors.textMuted,
+                        color: context.appPalette.textMuted,
                       ),
                       onPressed: () {
                         setState(() {
@@ -199,9 +201,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
+                      Text(
                         'ليس لديك حساب بعد؟',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style:
+                            TextStyle(color: context.appPalette.textSecondary),
                       ),
                       TextButton(
                         onPressed: isLoading
@@ -210,10 +213,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 setState(() => _localErrorMessage = null);
                                 context.push('/register');
                               },
-                        child: const Text(
+                        child: Text(
                           'إنشاء حساب جديد',
                           style: TextStyle(
-                            color: AppColors.primary,
+                            color: context.appPalette.primary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

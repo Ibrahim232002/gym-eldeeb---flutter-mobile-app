@@ -55,32 +55,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authNotifierProvider, (previous, next) {
-      if (next.status != AuthStatus.loading && next.status != AuthStatus.initial) {
+      if (next.status != AuthStatus.loading &&
+          next.status != AuthStatus.initial) {
         _navigate(next);
       }
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appPalette.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const BrandLogo(size: 96),
             const SizedBox(height: 48),
-            const SizedBox(
+            SizedBox(
               width: 32,
               height: 32,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(context.appPalette.primary),
               ),
             ),
             const SizedBox(height: 16),
             Text(
               'جارٍ التحميل ومزامنة البيانات...',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textMuted,
+                    color: context.appPalette.textMuted,
                   ),
             ),
           ],

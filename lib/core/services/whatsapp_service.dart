@@ -13,7 +13,7 @@ class WhatsappService {
   static String? normalizeEgyptianNumber(String phone) {
     // Remove all whitespace, dashes, parentheses and non-digit characters except leading '+'
     var clean = phone.replaceAll(RegExp(r'[\s\-()]+'), '');
-    
+
     // Strip leading '+' or '00'
     if (clean.startsWith('+')) {
       clean = clean.substring(1);
@@ -48,7 +48,8 @@ class WhatsappService {
   }
 
   /// Format membership expiring reminder message in Arabic
-  static String getExpiryReminder(String memberName, String planName, String endDateStr) {
+  static String getExpiryReminder(
+      String memberName, String planName, String endDateStr) {
     return 'السلام عليكم يا كابتن $memberName، نود تذكيرك بأن اشتراكك ($planName) في جيم الديب ينتهي قريباً بتاريخ $endDateStr. يسعدنا استمرار تمرينك معنا! 🏋️‍♂️';
   }
 
@@ -83,7 +84,8 @@ class WhatsappService {
         return await launchUrl(uri, mode: LaunchMode.platformDefault);
       }
     } catch (_) {
-      throw Exception('تعذر فتح تطبيق واتساب. يرجى التأكد من تثبيت التطبيق على جهازك.');
+      throw Exception(
+          'تعذر فتح تطبيق واتساب. يرجى التأكد من تثبيت التطبيق على جهازك.');
     }
   }
 }

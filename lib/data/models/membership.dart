@@ -31,9 +31,52 @@ class Membership {
   });
 
   bool get isExpired {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return endDate.isBefore(today);
+    return daysRemainingAt(DateTime.now()) < 0;
+  }
+
+  int daysRemainingAt(DateTime date) {
+    final today = DateTime.utc(date.year, date.month, date.day);
+    final endDay = DateTime.utc(endDate.year, endDate.month, endDate.day);
+    return endDay.difference(today).inDays;
+  }
+
+  bool isEligibleOn(DateTime date) {
+    final today = DateTime.utc(date.year, date.month, date.day);
+    final startDay =
+        DateTime.utc(startDate.year, startDate.month, startDate.day);
+    return status == 'active' &&
+        deletedAt == null &&
+        !startDay.isAfter(today) &&
+        daysRemainingAt(today) >= 0;
+  }
+
+  bool isExpiringWithinDays(DateTime date, {int days = 7}) {
+    final remainingDays = daysRemainingAt(date);
+    return days >= 0 &&
+        isEligibleOn(date) &&
+        remainingDays >= 0 &&
+        remainingDays <= days;
+  }
+
+  bool overlapsActivePeriod(Membership other) {
+    if (id == other.id ||
+        memberId != other.memberId ||
+        status != 'active' ||
+        other.status != 'active' ||
+        deletedAt != null ||
+        other.deletedAt != null) {
+      return false;
+    }
+
+    final thisStart =
+        DateTime.utc(startDate.year, startDate.month, startDate.day);
+    final thisEnd = DateTime.utc(endDate.year, endDate.month, endDate.day);
+    final otherStart = DateTime.utc(
+        other.startDate.year, other.startDate.month, other.startDate.day);
+    final otherEnd = DateTime.utc(
+        other.endDate.year, other.endDate.month, other.endDate.day);
+
+    return !thisStart.isAfter(otherEnd) && !otherStart.isAfter(thisEnd);
   }
 
   factory Membership.fromJson(Map<String, dynamic> json) {
@@ -114,4 +157,14 @@ class Membership {
     );
   }
 }
-// 
+
+List<Membership> expiringMembershipsWithinDays(
+  Iterable<Membership> memberships,
+  DateTime date, {
+  int days = 7,
+}) =>
+    memberships
+        .where(
+            (membership) => membership.isExpiringWithinDays(date, days: days))
+        .toList();
+//

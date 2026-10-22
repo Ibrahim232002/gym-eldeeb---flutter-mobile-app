@@ -59,13 +59,13 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
               'تم الانضمام للجيم بنجاح! مرحباً بك في جيم الديب.',
               textDirection: TextDirection.rtl,
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
-            backgroundColor: AppColors.success,
+            backgroundColor: context.appPalette.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -83,7 +83,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
             textDirection: TextDirection.rtl,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: AppColors.error,
+          backgroundColor: context.appPalette.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -102,7 +102,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
         title: const Text('الانضمام لصالة الجيم'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout_rounded, color: AppColors.error),
+            icon: Icon(Icons.logout_rounded, color: context.appPalette.error),
             tooltip: 'تسجيل الخروج',
             onPressed: () async {
               await ref.read(authNotifierProvider.notifier).signOut();
@@ -126,7 +126,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                     'أهلاً بك يا ${profile?.fullName.isNotEmpty == true ? profile!.fullName : "كابتن"}',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.primary,
+                          color: context.appPalette.primary,
                         ),
                   ),
                   const SizedBox(height: 6),
@@ -147,12 +147,13 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.15),
+                              color: context.appPalette.primary
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.vpn_key_rounded,
-                              color: AppColors.primary,
+                              color: context.appPalette.primary,
                               size: 24,
                             ),
                           ),
@@ -161,12 +162,12 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'تحقق أمني مشفر (Edge Function)',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 14,
-                                    color: AppColors.textPrimary,
+                                    color: context.appPalette.textPrimary,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -175,7 +176,9 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
-                                      ?.copyWith(color: AppColors.textSecondary),
+                                      ?.copyWith(
+                                          color:
+                                              context.appPalette.textSecondary),
                                 ),
                               ],
                             ),
@@ -191,14 +194,16 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.15),
+                        color: context.appPalette.error.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.error.withOpacity(0.4)),
+                        border: Border.all(
+                            color: context.appPalette.error
+                                .withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded,
-                              color: AppColors.error, size: 20),
+                          Icon(Icons.error_outline_rounded,
+                              color: context.appPalette.error, size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -265,13 +270,15 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                     onPressed: _isSubmitting
                         ? null
                         : () async {
-                            await ref.read(authNotifierProvider.notifier).signOut();
+                            await ref
+                                .read(authNotifierProvider.notifier)
+                                .signOut();
                             if (context.mounted) context.go('/login');
                           },
                     icon: const Icon(Icons.arrow_back_rounded, size: 18),
                     label: const Text('تسجيل الدخول بحساب آخر'),
                     style: TextButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
+                      foregroundColor: context.appPalette.textSecondary,
                     ),
                   ),
                 ],
