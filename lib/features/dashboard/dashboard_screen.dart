@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import '../../auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -18,6 +19,7 @@ import '../../data/models/membership.dart';
 import '../../data/models/payment.dart';
 import '../../data/models/gym.dart';
 import '../../data/models/user_profile.dart';
+import '../../widgets/member_photo.dart';
 
 /// Navigation Tab state provider
 final selectedTabProvider = StateProvider<int>((ref) => 0);
@@ -650,13 +652,11 @@ class _DashboardOverviewTab extends ConsumerWidget {
                   tileColor: context.appPalette.surfaceCard,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        context.appPalette.primary.withValues(alpha: 0.15),
-                    child: Text(_memberInitial(member.fullName),
-                        style: TextStyle(
-                            color: context.appPalette.primary,
-                            fontWeight: FontWeight.bold)),
+                  leading: MemberPhotoAvatar(
+                    gymId: member.gymId,
+                    fullName: member.fullName,
+                    photoPath: member.photoPath,
+                    radius: 22,
                   ),
                   title: Text(member.fullName,
                       style: const TextStyle(
@@ -993,13 +993,11 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                       color: context.appPalette.surfaceCard,
                       margin: const EdgeInsets.only(bottom: 10),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: context.appPalette.primary
-                              .withValues(alpha: 0.12),
-                          child: Text(_memberInitial(member.fullName),
-                              style: TextStyle(
-                                  color: context.appPalette.primary,
-                                  fontWeight: FontWeight.bold)),
+                        leading: MemberPhotoAvatar(
+                          gymId: member.gymId,
+                          fullName: member.fullName,
+                          photoPath: member.photoPath,
+                          radius: 22,
                         ),
                         title: Text(member.fullName,
                             style: const TextStyle(
@@ -1195,6 +1193,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
   final _phoneController = TextEditingController();
   final _notesController = TextEditingController();
   DateTime _joinDate = DateTime.now();
+  Uint8List? _photoBytes;
   bool _isSaving = false;
   String? _errorMessage;
 
@@ -1225,6 +1224,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                 phone: phone.isNotEmpty ? phone : null,
                 notes: notes.isNotEmpty ? notes : null,
                 joinDate: _joinDate,
+                photoBytes: _photoBytes,
               );
 
       if (!mounted) return;
@@ -1300,6 +1300,15 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                             color: context.appPalette.error, fontSize: 12)),
                   ),
 
+                MemberPhotoInput(
+                  gymId: ref.watch(dataSyncServiceProvider).gymId ?? '',
+                  fullName: _nameController.text,
+                  existingPhotoPath: null,
+                  selectedPhotoBytes: _photoBytes,
+                  onPhotoSelected: (bytes) =>
+                      setState(() => _photoBytes = bytes),
+                  onPhotoRemoved: () => setState(() => _photoBytes = null),
+                ),
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -1421,6 +1430,8 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
   late bool _isActive;
   late DateTime _joinDate;
   bool _isSaving = false;
+  Uint8List? _photoBytes;
+  bool _removePhoto = false;
 
   @override
   void initState() {
@@ -1447,26 +1458,47 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
     setState(() => _isSaving = true);
 
     try {
-      await ref.read(dataSyncServiceProvider.notifier).editMember(
-            widget.member.copyWith(
-              fullName: _nameController.text.trim(),
-              phone: _phoneController.text.trim().isNotEmpty
-                  ? _phoneController.text.trim()
-                  : null,
-              notes: _notesController.text.trim().isNotEmpty
-                  ? _notesController.text.trim()
-                  : null,
-              joinDate: _joinDate,
-              isActive: _isActive,
-            ),
-          );
+      final service = ref.read(dataSyncServiceProvider.notifier);
+      final oldPhotoPath = widget.member.photoPath;
+      String? nextPhotoPath = oldPhotoPath;
+      if (_removePhoto) {
+        nextPhotoPath = null;
+      } else if (_photoBytes != null) {
+        final extension = oldPhotoPath?.toLowerCase().endsWith('.jpg') == true
+            ? 'jpeg'
+            : 'jpg';
+        nextPhotoPath = await service.uploadMemberPhoto(
+          memberId: widget.member.id,
+          photoBytes: _photoBytes!,
+          extension: extension,
+        );
+      }
+
+      final persistedRemotely = await service.editMember(
+        widget.member.copyWith(
+          fullName: _nameController.text.trim(),
+          phone: _phoneController.text.trim().isNotEmpty
+              ? _phoneController.text.trim()
+              : null,
+          notes: _notesController.text.trim().isNotEmpty
+              ? _notesController.text.trim()
+              : null,
+          joinDate: _joinDate,
+          isActive: _isActive,
+          photoPath: nextPhotoPath,
+          clearPhotoPath: _removePhoto,
+        ),
+        photoPathToDelete: oldPhotoPath != nextPhotoPath ? oldPhotoPath : null,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('تم تحديث بيانات العضو بنجاح!',
+            content: Text(
+                persistedRemotely
+                    ? 'تم تحديث بيانات العضو بنجاح!'
+                    : 'تم حفظ التعديلات محلياً وستتم مزامنتها لاحقاً.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.success),
       );
@@ -1507,6 +1539,21 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                MemberPhotoInput(
+                  gymId: widget.member.gymId,
+                  fullName: _nameController.text,
+                  existingPhotoPath:
+                      _removePhoto ? null : widget.member.photoPath,
+                  selectedPhotoBytes: _photoBytes,
+                  onPhotoSelected: (bytes) => setState(() {
+                    _photoBytes = bytes;
+                    _removePhoto = false;
+                  }),
+                  onPhotoRemoved: () => setState(() {
+                    _photoBytes = null;
+                    _removePhoto = true;
+                  }),
+                ),
                 TextFormField(
                   controller: _nameController,
                   decoration:
@@ -1629,15 +1676,11 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 Expanded(
                   child: Row(
                     children: [
-                      CircleAvatar(
+                      MemberPhotoAvatar(
+                        gymId: member.gymId,
+                        fullName: member.fullName,
+                        photoPath: member.photoPath,
                         radius: 22,
-                        backgroundColor:
-                            context.appPalette.primary.withValues(alpha: 0.2),
-                        child: Text(_memberInitial(member.fullName),
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: context.appPalette.primary)),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -3485,6 +3528,7 @@ class _SearchableMemberPickerState extends State<_SearchableMemberPicker> {
     final result = await showDialog<_MemberSelectionResult>(
       context: context,
       builder: (_) => _MemberSearchDialog(
+        key: UniqueKey(),
         members: widget.members,
         allowUnlinked: widget.allowUnlinked,
       ),
@@ -3549,6 +3593,7 @@ class _MemberSearchDialog extends StatefulWidget {
   final bool allowUnlinked;
 
   const _MemberSearchDialog({
+    super.key,
     required this.members,
     required this.allowUnlinked,
   });
@@ -3558,8 +3603,15 @@ class _MemberSearchDialog extends StatefulWidget {
 }
 
 class _MemberSearchDialogState extends State<_MemberSearchDialog> {
-  final _searchController = TextEditingController();
+  late final TextEditingController _searchController;
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: '');
+    _query = '';
+  }
 
   @override
   void dispose() {
@@ -4010,43 +4062,40 @@ class _SettingsTab extends ConsumerWidget {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  RadioGroup<AppThemeVariant>(
-                    groupValue: selectedTheme,
-                    onChanged: (variant) => _saveTheme(context, ref, variant),
-                    child: const Column(
-                      children: [
-                        RadioListTile<AppThemeVariant>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('داكن وذهبي'),
-                          value: AppThemeVariant.darkGold,
-                        ),
-                        RadioListTile<AppThemeVariant>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('داكن وأزرق'),
-                          value: AppThemeVariant.darkBlue,
-                        ),
-                        RadioListTile<AppThemeVariant>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('المظهر الفاتح'),
-                          value: AppThemeVariant.light,
-                        ),
-                        RadioListTile<AppThemeVariant>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('داكن وبنفسجي'),
-                          value: AppThemeVariant.darkPurple,
-                        ),
-                        RadioListTile<AppThemeVariant>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('داكن وأخضر'),
-                          value: AppThemeVariant.darkGreen,
-                        ),
-                        RadioListTile<AppThemeVariant>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('محايد وعصري'),
-                          value: AppThemeVariant.neutral,
-                        ),
-                      ],
+                  DropdownButtonFormField<AppThemeVariant>(
+                    isExpanded: true,
+                    initialValue: selectedTheme,
+                    decoration: const InputDecoration(
+                      labelText: 'لون التطبيق',
+                      prefixIcon: Icon(Icons.palette_outlined),
                     ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: AppThemeVariant.darkGold,
+                        child: Text('داكن وذهبي'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemeVariant.darkBlue,
+                        child: Text('داكن وأزرق'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemeVariant.light,
+                        child: Text('المظهر الفاتح'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemeVariant.darkPurple,
+                        child: Text('داكن وبنفسجي'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemeVariant.darkGreen,
+                        child: Text('داكن وأخضر'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemeVariant.neutral,
+                        child: Text('محايد وعصري'),
+                      ),
+                    ],
+                    onChanged: (variant) => _saveTheme(context, ref, variant),
                   ),
                   const Divider(),
                   _buildSettingRow(context, 'اللغة', 'العربية (افتراضي)'),

@@ -35,6 +35,8 @@ dependencies:
   # UI & Typography (Arabic Google Fonts & Localization)
   google_fonts: ^6.2.1
   intl: 0.20.3
+  image_picker: ^1.2.4
+  flutter_image_compress: ^2.5.1
 
 dev_dependencies:
   flutter_test:

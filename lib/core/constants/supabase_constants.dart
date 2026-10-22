@@ -24,6 +24,7 @@ class SupabaseConstants {
   static const String tableMembershipPlans = 'membership_plans';
   static const String tableMemberships = 'memberships';
   static const String tablePayments = 'payments';
+  static const String bucketMemberPhotos = 'member-photos';
   static const String tableSyncMetadata = 'sync_metadata';
   static const String tableGymInvites = 'gym_invites';
 }

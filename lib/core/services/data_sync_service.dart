@@ -173,6 +173,7 @@ class DataSyncService extends ChangeNotifier {
   // --- Getters ---
   SyncStatus get syncStatus => _syncStatus;
   String? get syncErrorMessage => _syncErrorMessage;
+  String? get gymId => _gymId;
   List<Member> get members =>
       _members.where((m) => m.deletedAt == null).toList();
   List<MembershipPlan> get plans =>
@@ -489,6 +490,18 @@ class DataSyncService extends ChangeNotifier {
   }
 
   Future<void> _executePendingActionOnRemote(PendingAction action) async {
+    if (action.table == 'members' &&
+        action.action == 'update_with_photo_cleanup') {
+      final memberPayload = action.payload['member'] as Map<String, dynamic>;
+      final photoPath = action.payload['photo_path_to_delete'] as String;
+      await _supabase
+          .from(SupabaseConstants.tableMembers)
+          .update(memberPayload)
+          .eq('id', memberPayload['id'] as Object);
+      await deleteMemberPhoto(photoPath);
+      return;
+    }
+
     if (action.table == 'membership_bundle' &&
         action.action == 'create_with_initial_payment') {
       final rawMembership =
@@ -646,15 +659,26 @@ class DataSyncService extends ChangeNotifier {
     String? phone,
     String? notes,
     required DateTime joinDate,
+    Uint8List? photoBytes,
+    String photoExtension = 'jpg',
   }) async {
     final gymId = await requireGymId();
+    final memberId = const Uuid().v4();
+    final photoPath = photoBytes == null
+        ? null
+        : await uploadMemberPhoto(
+            memberId: memberId,
+            photoBytes: photoBytes,
+            extension: photoExtension,
+          );
 
     final newMember = Member(
-      id: const Uuid().v4(),
+      id: memberId,
       gymId: gymId,
       fullName: fullName.trim(),
       phone: phone?.trim(),
       notes: notes?.trim(),
+      photoPath: photoPath,
       joinDate: joinDate,
       isActive: true,
       createdBy: _actorUserId,
@@ -694,7 +718,10 @@ class DataSyncService extends ChangeNotifier {
     return newMember;
   }
 
-  Future<void> editMember(Member updated) async {
+  Future<bool> editMember(
+    Member updated, {
+    String? photoPathToDelete,
+  }) async {
     final edited = updated.copyWith(updatedAt: DateTime.now());
 
     _members = _members.map((m) => m.id == edited.id ? edited : m).toList();
@@ -705,23 +732,97 @@ class DataSyncService extends ChangeNotifier {
         _keyMembers, jsonEncode(_members.map((m) => m.toJson()).toList()));
 
     final online = await _networkInfo.isConnected;
+    var persistedRemotely = false;
     if (online) {
       try {
         await _supabase
             .from(SupabaseConstants.tableMembers)
             .update(edited.toJson())
             .eq('id', edited.id);
+        if (photoPathToDelete != null) {
+          await deleteMemberPhoto(photoPathToDelete);
+        }
+        persistedRemotely = true;
       } catch (error) {
-        await _queuePendingWrite(
-          'members',
-          'update',
-          edited.toJson(),
+        await _queueMemberUpdate(
+          edited,
+          photoPathToDelete: photoPathToDelete,
           error: error,
         );
       }
     } else {
-      await _queuePendingWrite('members', 'update', edited.toJson());
+      await _queueMemberUpdate(
+        edited,
+        photoPathToDelete: photoPathToDelete,
+      );
     }
+    return persistedRemotely;
+  }
+
+  Future<void> _queueMemberUpdate(
+    Member member, {
+    String? photoPathToDelete,
+    Object? error,
+  }) async {
+    if (photoPathToDelete == null) {
+      await _queuePendingWrite('members', 'update', member.toJson(),
+          error: error);
+      return;
+    }
+    await _queuePendingWrite(
+      'members',
+      'update_with_photo_cleanup',
+      {
+        'member': member.toJson(),
+        'photo_path_to_delete': photoPathToDelete,
+      },
+      error: error,
+    );
+  }
+
+  Future<String> uploadMemberPhoto({
+    required String memberId,
+    required Uint8List photoBytes,
+    String extension = 'jpg',
+  }) async {
+    if (photoBytes.isEmpty) {
+      throw ArgumentError.value(photoBytes, 'photoBytes', 'الصورة فارغة.');
+    }
+    final normalizedExtension = extension.toLowerCase();
+    if (normalizedExtension != 'jpg' && normalizedExtension != 'jpeg') {
+      throw ArgumentError.value(
+        extension,
+        'extension',
+        'صيغة الصورة غير مدعومة.',
+      );
+    }
+    final gymId = await requireGymId();
+    final path = '$gymId/$memberId.$normalizedExtension';
+    await _supabase.storage
+        .from(SupabaseConstants.bucketMemberPhotos)
+        .uploadBinary(
+          path,
+          photoBytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        );
+    return path;
+  }
+
+  Future<void> deleteMemberPhoto(String photoPath) async {
+    final gymId = await requireGymId();
+    if (!photoPath.startsWith('$gymId/')) {
+      throw ArgumentError.value(
+        photoPath,
+        'photoPath',
+        'لا يمكن الوصول إلى صور صالة أخرى.',
+      );
+    }
+    await _supabase.storage
+        .from(SupabaseConstants.bucketMemberPhotos)
+        .remove([photoPath]);
   }
 
   Future<void> deleteMember(String id) async {

@@ -5,6 +5,7 @@ class Member {
   final String fullName;
   final String? phone;
   final String? notes;
+  final String? photoPath;
   final DateTime joinDate;
   final bool isActive;
   final String? createdBy;
@@ -20,6 +21,7 @@ class Member {
     required this.fullName,
     this.phone,
     this.notes,
+    this.photoPath,
     required this.joinDate,
     this.isActive = true,
     this.createdBy,
@@ -37,6 +39,7 @@ class Member {
       fullName: json['full_name'] as String? ?? '',
       phone: json['phone'] as String?,
       notes: json['notes'] as String?,
+      photoPath: json['photo_path'] as String?,
       joinDate: json['join_date'] != null
           ? DateTime.parse(json['join_date'] as String)
           : DateTime.now(),
@@ -63,6 +66,7 @@ class Member {
       'full_name': fullName,
       'phone': phone,
       'notes': notes,
+      'photo_path': photoPath,
       'join_date': joinDate.toIso8601String().substring(0, 10),
       'is_active': isActive,
       'created_by': createdBy,
@@ -80,6 +84,8 @@ class Member {
     String? fullName,
     String? phone,
     String? notes,
+    String? photoPath,
+    bool clearPhotoPath = false,
     DateTime? joinDate,
     bool? isActive,
     String? createdBy,
@@ -95,6 +101,7 @@ class Member {
       fullName: fullName ?? this.fullName,
       phone: phone ?? this.phone,
       notes: notes ?? this.notes,
+      photoPath: clearPhotoPath ? null : photoPath ?? this.photoPath,
       joinDate: joinDate ?? this.joinDate,
       isActive: isActive ?? this.isActive,
       createdBy: createdBy ?? this.createdBy,

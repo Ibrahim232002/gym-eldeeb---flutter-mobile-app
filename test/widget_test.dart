@@ -561,6 +561,7 @@ void main() {
         'id': 'member-1',
         'gym_id': 'gym-1',
         'full_name': 'Test Member',
+        'photo_path': 'gym-1/member-1.jpg',
         'join_date': '2026-10-03',
         'created_by': 'user-1',
         'created_at': '2026-10-03T10:00:00.000Z',
@@ -569,6 +570,8 @@ void main() {
 
       expect(member.createdBy, 'user-1');
       expect(Member.fromJson(member.toJson()).createdBy, 'user-1');
+      expect(member.photoPath, 'gym-1/member-1.jpg');
+      expect(member.copyWith(clearPhotoPath: true).photoPath, isNull);
     });
 
     test('Membership preserves created_by across JSON round-trip', () {
@@ -630,6 +633,58 @@ void main() {
         isNull,
       );
     });
+  });
+
+  test('member photo deletion rejects paths outside the active gym', () async {
+    SharedPreferences.setMockInitialValues({});
+    final supabase = SupabaseClient('https://example.supabase.co', 'test-key');
+    final service = DataSyncService(
+      supabase: supabase,
+      networkInfo: _OfflineNetworkInfo(),
+      initialGymId: 'gym-1',
+    );
+
+    await expectLater(
+      service.deleteMemberPhoto('gym-2/member-1.jpg'),
+      throwsArgumentError,
+    );
+  });
+
+  test('offline member photo removal queues update before photo deletion',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final supabase = SupabaseClient('https://example.supabase.co', 'test-key');
+    final service = DataSyncService(
+      supabase: supabase,
+      networkInfo: _OfflineNetworkInfo(),
+      initialGymId: 'gym-1',
+    );
+    final member = Member(
+      id: 'member-1',
+      gymId: 'gym-1',
+      fullName: 'Photo member',
+      photoPath: 'gym-1/member-1.jpg',
+      joinDate: DateTime(2026, 10, 1),
+      createdAt: DateTime(2026, 10, 1),
+      updatedAt: DateTime(2026, 10, 1),
+    );
+
+    await service.editMember(
+      member.copyWith(clearPhotoPath: true),
+      photoPathToDelete: member.photoPath,
+    );
+
+    final preferences = await SharedPreferences.getInstance();
+    final queue = decodePendingActions(
+      preferences.getString('pending_queue_gym-1'),
+    );
+    expect(queue, hasLength(1));
+    expect(queue.single.action, 'update_with_photo_cleanup');
+    expect(queue.single.payload['photo_path_to_delete'], member.photoPath);
+    expect(
+      (queue.single.payload['member'] as Map<String, dynamic>)['photo_path'],
+      isNull,
+    );
   });
 
   testWidgets('themed action buttons respect finite horizontal constraints',
@@ -787,6 +842,10 @@ void main() {
     await tester.tap(find.byTooltip('بحث عن عضو'));
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('اختر العضو المسدد'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      isEmpty,
+    );
 
     tester.view.viewInsets = const FakeViewPadding(bottom: 240);
     addTearDown(tester.view.resetViewInsets);
@@ -801,6 +860,12 @@ void main() {
       find.text('عضو البحث بالهاتف • 01012345678'),
       findsOneWidget,
     );
+
+    await tester.tap(find.byTooltip('بحث عن عضو'));
+    await tester.pump(const Duration(milliseconds: 350));
+    final searchField = tester.widget<TextField>(find.byType(TextField).last);
+    expect(searchField.controller!.text, isEmpty);
+    expect(find.text('عضو البحث بالهاتف • 01012345678'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -994,8 +1059,11 @@ void main() {
     await tester.pumpWidget(_buildDashboardTestApp(selectedTab: 6));
     await tester.pump(const Duration(milliseconds: 350));
 
-    await tester.ensureVisible(find.text('داكن وأزرق'));
-    await tester.tap(find.text('داكن وأزرق'));
+    final themeDropdown = find.byType(DropdownButtonFormField<AppThemeVariant>);
+    await tester.ensureVisible(themeDropdown);
+    await tester.tap(themeDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('داكن وأزرق').last);
     await tester.pumpAndSettle();
 
     final preferences = await SharedPreferences.getInstance();
