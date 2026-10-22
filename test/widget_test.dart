@@ -314,6 +314,204 @@ void main() {
       );
       service.dispose();
     });
+
+    test('online activation sends one full-price payment through the RPC',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      Map<String, dynamic>? rpcParameters;
+      var rpcCalls = 0;
+      final supabase = SupabaseClient(
+        'https://example.supabase.co',
+        'test-key',
+        httpClient: http_testing.MockClient((request) async {
+          if (request.url.path ==
+                  '/rest/v1/rpc/create_membership_with_initial_payment' &&
+              request.method == 'POST') {
+            rpcCalls++;
+            rpcParameters = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response(
+              jsonEncode({
+                'membership': rpcParameters!['p_membership'],
+                'payment': rpcParameters!['p_payment'],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+              request: request,
+            );
+          }
+          if (request.method == 'GET') {
+            return http.Response('[]', 200,
+                headers: {'content-type': 'application/json'},
+                request: request);
+          }
+          return http.Response('Unexpected request', 500, request: request);
+        }),
+      );
+      supabase.auth.stopAutoRefresh();
+      final network = _MutableNetworkInfo(false);
+      final service = DataSyncService(
+        supabase: supabase,
+        networkInfo: network,
+        initialGymId: 'gym-1',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      network.connected = true;
+
+      final result = await service.createMembership(
+        memberId: 'member-1',
+        planId: null,
+        startDate: DateTime.utc(2026, 10, 1),
+        endDate: DateTime.utc(2026, 10, 30),
+        price: 250,
+        initialPaymentAmount: 250,
+        paymentMethod: 'vodafone_cash',
+        paymentDate: DateTime.utc(2026, 10, 1, 12),
+        paymentNotes: 'دفعة تفعيل اشتراك',
+      );
+
+      final payment = rpcParameters!['p_payment'] as Map<String, dynamic>;
+      expect(result.isPending, isFalse);
+      expect(payment['membership_id'], result.membership.id);
+      expect(payment['amount'], 250);
+      expect(payment['payment_method'], 'vodafone_cash');
+      expect(payment['notes'], 'دفعة تفعيل اشتراك');
+      expect(rpcCalls, 1);
+      expect(service.payments, hasLength(1));
+      expect(
+        service.payments.fold<double>(0, (total, item) => total + item.amount),
+        250,
+      );
+      service.dispose();
+      await supabase.dispose();
+    });
+
+    test('RPC rejection does not cache a successful subscription payment',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final supabase = SupabaseClient(
+        'https://example.supabase.co',
+        'test-key',
+        httpClient: http_testing.MockClient((request) async {
+          if (request.url.path ==
+              '/rest/v1/rpc/create_membership_with_initial_payment') {
+            return http.Response(
+              jsonEncode({
+                'code': '42501',
+                'message': 'payment rejected',
+                'details': null,
+                'hint': null,
+              }),
+              403,
+              headers: {'content-type': 'application/json'},
+              request: request,
+            );
+          }
+          if (request.method == 'GET') {
+            return http.Response('[]', 200,
+                headers: {'content-type': 'application/json'},
+                request: request);
+          }
+          return http.Response('Unexpected request', 500, request: request);
+        }),
+      );
+      supabase.auth.stopAutoRefresh();
+      final network = _MutableNetworkInfo(false);
+      final service = DataSyncService(
+        supabase: supabase,
+        networkInfo: network,
+        initialGymId: 'gym-1',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      network.connected = true;
+
+      await expectLater(
+        service.createMembership(
+          memberId: 'member-1',
+          planId: null,
+          startDate: DateTime.utc(2026, 10, 1),
+          endDate: DateTime.utc(2026, 10, 30),
+          price: 250,
+          initialPaymentAmount: 250,
+          paymentMethod: 'cash',
+        ),
+        throwsA(isA<PostgrestException>()),
+      );
+      expect(service.payments, isEmpty);
+      expect(service.memberships, isEmpty);
+      service.dispose();
+      await supabase.dispose();
+    });
+
+    test('offline activation retry sends the queued payment only once',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      var rpcCalls = 0;
+      final supabase = SupabaseClient(
+        'https://example.supabase.co',
+        'test-key',
+        httpClient: http_testing.MockClient((request) async {
+          if (request.url.path ==
+                  '/rest/v1/rpc/create_membership_with_initial_payment' &&
+              request.method == 'POST') {
+            rpcCalls++;
+            final parameters = jsonDecode(request.body) as Map<String, dynamic>;
+            return http.Response(
+              jsonEncode({
+                'membership': parameters['p_membership'],
+                'payment': parameters['p_payment'],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+              request: request,
+            );
+          }
+          if (request.method == 'GET') {
+            return http.Response('[]', 200,
+                headers: {'content-type': 'application/json'},
+                request: request);
+          }
+          return http.Response('Unexpected request', 500, request: request);
+        }),
+      );
+      supabase.auth.stopAutoRefresh();
+      final network = _MutableNetworkInfo(false);
+      final service = DataSyncService(
+        supabase: supabase,
+        networkInfo: network,
+        initialGymId: 'gym-1',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final created = await service.createMembership(
+        memberId: 'member-1',
+        planId: null,
+        startDate: DateTime.utc(2026, 10, 1),
+        endDate: DateTime.utc(2026, 10, 30),
+        price: 250,
+        initialPaymentAmount: 250,
+        paymentMethod: 'card',
+      );
+      expect(created.isPending, isTrue);
+      final queuedBeforeRetry = decodePendingActions(
+        preferences.getString('pending_queue_gym-1'),
+      );
+      expect(queuedBeforeRetry, hasLength(1));
+      expect(queuedBeforeRetry.single.payload['payment'], isNotNull);
+
+      network.connected = true;
+      await service.syncAll(forceRetry: true);
+      expect(rpcCalls, 1);
+      expect(
+        decodePendingActions(preferences.getString('pending_queue_gym-1')),
+        isEmpty,
+      );
+
+      await service.syncAll(forceRetry: true);
+      expect(rpcCalls, 1);
+      service.dispose();
+      await supabase.dispose();
+    });
   });
 
   group('Membership and server-side uniqueness', () {
@@ -830,65 +1028,8 @@ void main() {
         'next request');
   });
 
-  group('Offline payment and subscription creation', () {
-    test('general and membership payments retry without duplicate rows',
-        () async {
-      SharedPreferences.setMockInitialValues({});
-      final supabase = SupabaseClient(
-        'https://example.supabase.co',
-        'test-key',
-      );
-      supabase.auth.stopAutoRefresh();
-      final service = DataSyncService(
-        supabase: supabase,
-        networkInfo: _OfflineNetworkInfo(),
-        initialGymId: 'gym-1',
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      final paidAt = DateTime.utc(2026, 10, 22, 10);
-      const generalPaymentId = '00000000-0000-4000-8000-000000000001';
-      const membershipPaymentId = '00000000-0000-4000-8000-000000000002';
-
-      final generalPayment = await service.recordPayment(
-        paymentId: generalPaymentId,
-        membershipId: null,
-        amount: 125,
-        paymentMethod: 'cash',
-        paidAt: paidAt,
-        notes: 'General income',
-      );
-      await service.recordPayment(
-        paymentId: generalPaymentId,
-        membershipId: null,
-        amount: 125,
-        paymentMethod: 'cash',
-        paidAt: paidAt,
-        notes: 'General income',
-      );
-      final membershipPayment = await service.recordPayment(
-        paymentId: membershipPaymentId,
-        membershipId: 'existing-membership',
-        amount: 75,
-        paymentMethod: 'card',
-        paidAt: paidAt,
-        notes: 'Outstanding balance',
-      );
-
-      expect(generalPayment.membershipId, isNull);
-      expect(membershipPayment.membershipId, 'existing-membership');
-      expect(service.payments, hasLength(2));
-      final preferences = await SharedPreferences.getInstance();
-      final queued = decodePendingActions(
-        preferences.getString('pending_queue_gym-1'),
-      );
-      expect(queued, hasLength(2));
-      expect(queued.map((action) => action.payload['id']).toSet(),
-          {generalPaymentId, membershipPaymentId});
-      service.dispose();
-    });
-
-    test('offline subscription queues one bundle with optional initial payment',
-        () async {
+  group('Subscription creation and initial payment', () {
+    test('offline subscription queues one required payment bundle', () async {
       SharedPreferences.setMockInitialValues({});
       final plan = MembershipPlan(
         id: 'plan-monthly',
@@ -924,6 +1065,7 @@ void main() {
         endDate: startDate.add(const Duration(days: 60)),
         price: plan.price,
         initialPaymentAmount: plan.price,
+        paymentMethod: 'card',
         paymentNotes: 'Initial payment',
       );
       expect(initialPaymentResult.isPending, isTrue);
@@ -932,14 +1074,6 @@ void main() {
         plan.endDateFor(startDate),
       );
 
-      final noPaymentResult = await service.createMembership(
-        memberId: 'member-2',
-        planId: plan.id,
-        startDate: startDate,
-        endDate: plan.endDateFor(startDate),
-        price: plan.price,
-      );
-      expect(noPaymentResult.isPending, isTrue);
       await expectLater(
         service.createMembership(
           memberId: 'member-1',
@@ -948,6 +1082,7 @@ void main() {
           endDate: plan.endDateFor(startDate),
           price: plan.price,
           initialPaymentAmount: plan.price,
+          paymentMethod: 'card',
           paymentNotes: 'Initial payment',
         ),
         throwsA(isA<DuplicateActiveMembershipException>()),
@@ -956,11 +1091,53 @@ void main() {
       final queued = decodePendingActions(
         preferences.getString('pending_queue_gym-1'),
       );
-      expect(queued, hasLength(2));
-      final queuedPayments =
-          queued.map((action) => action.payload['payment']).toList();
-      expect(queuedPayments.whereType<Map<String, dynamic>>(), hasLength(1));
-      expect(queuedPayments, contains(null));
+      expect(queued, hasLength(1));
+      final bundle = queued.firstWhere(
+        (action) => action.table == 'membership_bundle',
+      );
+      final queuedMembership =
+          bundle.payload['membership'] as Map<String, dynamic>;
+      final queuedPayment = bundle.payload['payment'] as Map<String, dynamic>;
+      expect(queuedPayment['membership_id'], queuedMembership['id']);
+      expect(queuedPayment['amount'], plan.price);
+      expect(queuedPayment['payment_method'], 'card');
+      expect(queuedPayment['notes'], 'Initial payment');
+      await expectLater(
+        service.createMembership(
+          memberId: 'member-2',
+          planId: plan.id,
+          startDate: startDate,
+          endDate: plan.endDateFor(startDate),
+          price: 0,
+          initialPaymentAmount: 0,
+          paymentMethod: 'cash',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        service.createMembership(
+          memberId: 'member-3',
+          planId: plan.id,
+          startDate: startDate,
+          endDate: plan.endDateFor(startDate),
+          price: plan.price,
+          initialPaymentAmount: double.nan,
+          paymentMethod: 'cash',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        service.createMembership(
+          memberId: 'member-4',
+          planId: plan.id,
+          startDate: startDate,
+          endDate: plan.endDateFor(startDate),
+          price: plan.price,
+          initialPaymentAmount: plan.price - 1,
+          paymentMethod: 'cash',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
       service.dispose();
     });
   });
@@ -1142,7 +1319,6 @@ void main() {
       tester.view.physicalSize = Size(width, 720);
       var addedMember = false;
       var createdSubscription = false;
-      var recordedPayment = false;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -1156,7 +1332,6 @@ void main() {
                   child: DashboardQuickActions(
                     onAddMember: () => addedMember = true,
                     onNewSubscription: () => createdSubscription = true,
-                    onRecordPayment: () => recordedPayment = true,
                   ),
                 ),
               ),
@@ -1167,116 +1342,16 @@ void main() {
 
       expect(find.text('إضافة عضو'), findsOneWidget);
       expect(find.text('اشتراك جديد'), findsOneWidget);
-      expect(find.text('تسجيل دفعة'), findsOneWidget);
+      expect(find.text('تسجيل دفعة'), findsNothing);
       expect(find.text('استيراد CSV'), findsNothing);
       expect(tester.takeException(), isNull);
 
       await tester.tap(find.text('إضافة عضو'));
       await tester.tap(find.text('اشتراك جديد'));
-      await tester.tap(find.text('تسجيل دفعة'));
       expect(addedMember, isTrue);
       expect(createdSubscription, isTrue);
-      expect(recordedPayment, isTrue);
       expect(tester.takeException(), isNull);
     }
-  });
-
-  testWidgets('payment dialog stays scrollable on a short screen with keyboard',
-      (tester) async {
-    tester.view.physicalSize = const Size(320, 480);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetViewInsets);
-
-    await tester.pumpWidget(
-      _buildDashboardTestApp(
-        selectedTab: 0,
-        members: [
-          Member(
-            id: 'member-1',
-            gymId: 'gym-1',
-            fullName: 'عضو تجريبي باسم طويل يظهر كاملاً في القائمة',
-            joinDate: DateTime(2026, 10, 1),
-            createdAt: DateTime(2026, 10, 1),
-            updatedAt: DateTime(2026, 10, 1),
-          ),
-        ],
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.ensureVisible(find.text('تسجيل دفعة'));
-    await tester.tap(find.text('تسجيل دفعة'));
-    await tester.pump(const Duration(milliseconds: 350));
-
-    expect(find.text('تسجيل دفعة إيراد جديدة'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.ensureVisible(find.byType(TextFormField).last);
-    await tester.pump();
-
-    expect(find.text('تسجيل الدفعة'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('payment member search finds and selects a member by phone',
-      (tester) async {
-    tester.view.physicalSize = const Size(360, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      _buildDashboardTestApp(
-        selectedTab: 0,
-        members: [
-          Member(
-            id: 'member-phone',
-            gymId: 'gym-1',
-            fullName: 'عضو البحث بالهاتف',
-            phone: '01012345678',
-            joinDate: DateTime.now(),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        ],
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.ensureVisible(find.text('تسجيل دفعة'));
-    await tester.tap(find.text('تسجيل دفعة'));
-    await tester.pump(const Duration(milliseconds: 350));
-
-    await tester.tap(find.byTooltip('بحث عن عضو'));
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(find.text('اختر العضو المسدد'), findsOneWidget);
-    expect(
-      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
-      isEmpty,
-    );
-
-    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
-    addTearDown(tester.view.resetViewInsets);
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.enterText(find.byType(TextField).last, '01012345678');
-    await tester.pump();
-    expect(find.text('عضو البحث بالهاتف'), findsNWidgets(2));
-
-    await tester.tap(find.text('عضو البحث بالهاتف').last);
-    await tester.pump();
-    expect(
-      find.text('عضو البحث بالهاتف • 01012345678'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byTooltip('بحث عن عضو'));
-    await tester.pump(const Duration(milliseconds: 350));
-    final searchField = tester.widget<TextField>(find.byType(TextField).last);
-    expect(searchField.controller!.text, isEmpty);
-    expect(find.text('عضو البحث بالهاتف • 01012345678'), findsOneWidget);
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('pending sync warning stays visible until retry succeeds',
@@ -1529,9 +1604,9 @@ void main() {
     await tester.tap(find.text('اشتراك جديد'));
     await tester.pump(const Duration(milliseconds: 350));
 
-    final paymentConfirmation =
-        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile));
-    expect(paymentConfirmation.value, isFalse);
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(find.text('طريقة الدفع *'), findsOneWidget);
+    expect(find.text('نقدي (Cash)'), findsOneWidget);
     await tester.tap(find.byTooltip('بحث عن عضو'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.enterText(find.byType(TextField).last, '01012345678');
@@ -1541,7 +1616,7 @@ void main() {
     await tester.pump();
     expect(find.text('عضو الباقات • 01012345678'), findsOneWidget);
 
-    final planDropdown = find.byType(DropdownButtonFormField<String>).last;
+    final planDropdown = find.byType(DropdownButtonFormField<String>).first;
     await tester.tap(planDropdown);
     await tester.pumpAndSettle();
     expect(find.text('الباقة النشطة (300.0 ج.م)'), findsNWidgets(2));

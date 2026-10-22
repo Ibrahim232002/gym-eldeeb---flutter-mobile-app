@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uuid/uuid.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 
@@ -73,13 +72,11 @@ bool memberMatchesSearch(Member member, String query) {
 class DashboardQuickActions extends StatelessWidget {
   final VoidCallback onAddMember;
   final VoidCallback onNewSubscription;
-  final VoidCallback onRecordPayment;
 
   const DashboardQuickActions({
     super.key,
     required this.onAddMember,
     required this.onNewSubscription,
-    required this.onRecordPayment,
   });
 
   @override
@@ -102,15 +99,6 @@ class DashboardQuickActions extends StatelessWidget {
             onPressed: onNewSubscription,
             icon: const Icon(Icons.card_membership_rounded, size: 18),
             label: const Text('اشتراك جديد'),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onRecordPayment,
-            icon: const Icon(Icons.payment_rounded, size: 18),
-            label: const Text('تسجيل دفعة'),
           ),
         ),
       ],
@@ -545,13 +533,6 @@ class _DashboardOverviewTab extends ConsumerWidget {
                         context: context,
                         barrierDismissible: false,
                         builder: (_) => const _AddMembershipDialog(),
-                      );
-                    },
-                    onRecordPayment: () {
-                      showDialog<void>(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (_) => const _AddPaymentDialog(),
                       );
                     },
                   ),
@@ -1842,18 +1823,6 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 const Text('سجل المدفوعات والإيصالات',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                TextButton.icon(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) =>
-                          _RecordPaymentDialog(preSelectedMemberId: member.id),
-                    );
-                  },
-                  icon: const Icon(Icons.add, size: 16),
-                  label:
-                      const Text('تسجيل دفعة', style: TextStyle(fontSize: 12)),
-                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -3003,10 +2972,10 @@ class _CreateMembershipDialogState
     extends ConsumerState<_CreateMembershipDialog> {
   String? _selectedMemberId;
   String? _selectedPlanId;
+  String _paymentMethod = 'cash';
   final _priceCtrl = TextEditingController();
   late DateTime _startDate;
   late DateTime _endDate;
-  bool _recordPaymentNow = false;
   bool _isSaving = false;
 
   @override
@@ -3046,16 +3015,11 @@ class _CreateMembershipDialogState
       return;
     }
     final price = double.tryParse(_priceCtrl.text);
-    if (price == null ||
-        !price.isFinite ||
-        price < 0 ||
-        (_recordPaymentNow && price <= 0)) {
+    if (price == null || !price.isFinite || price <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            _recordPaymentNow
-                ? 'أدخل سعراً أكبر من صفر لتسجيل دفعة.'
-                : 'أدخل سعراً صحيحاً غير سالب.',
+          content: const Text(
+            'أدخل سعراً صحيحاً أكبر من صفر.',
             textDirection: ui.TextDirection.rtl,
           ),
           backgroundColor: context.appPalette.error,
@@ -3074,7 +3038,9 @@ class _CreateMembershipDialogState
                 startDate: _startDate,
                 endDate: _endDate,
                 price: price,
-                initialPaymentAmount: _recordPaymentNow ? price : null,
+                initialPaymentAmount: price,
+                paymentMethod: _paymentMethod,
+                paymentDate: DateTime.now(),
                 paymentNotes: 'دفعة تفعيل اشتراك',
               );
 
@@ -3220,22 +3186,38 @@ class _CreateMembershipDialogState
             TextFormField(
               controller: _priceCtrl,
               decoration: const InputDecoration(
-                  labelText: 'السعر الفعلي المطلوب (ج.م)'),
+                  labelText: 'السعر الفعلي المطلوب (ج.م) *'),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
-            CheckboxListTile(
-              title: const Text('تسجيل دفعة كاملة الآن',
-                  style: TextStyle(fontSize: 12)),
-              value: _recordPaymentNow,
-              activeColor: context.appPalette.primary,
-              contentPadding: EdgeInsets.zero,
-              subtitle: const Text(
-                'سيتم إنشاء سجل دفع بمبلغ سعر الاشتراك فقط عند التأكيد.',
-              ),
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: _paymentMethod,
+              decoration: const InputDecoration(labelText: 'طريقة الدفع *'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'cash',
+                  child: Text('نقدي (Cash)',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                DropdownMenuItem(
+                  value: 'card',
+                  child: Text('فيزا / شبكة (Card)',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                DropdownMenuItem(
+                  value: 'vodafone_cash',
+                  child: Text('فودافون كاش / محفظة',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ],
               onChanged: _isSaving
                   ? null
-                  : (v) => setState(() => _recordPaymentNow = v ?? false),
+                  : (value) {
+                      if (value != null) {
+                        setState(() => _paymentMethod = value);
+                      }
+                    },
             ),
           ],
         ),
@@ -3377,21 +3359,6 @@ class _PaymentsTab extends ConsumerWidget {
                     );
                   },
                 ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                showDialog<void>(
-                    context: context,
-                    builder: (_) => const _RecordPaymentDialog());
-              },
-              icon: const Icon(Icons.add_reaction_rounded),
-              label: const Text('تسجيل إيراد / دفعة مستلمة'),
-            ),
-          ),
         ),
       ],
     );
@@ -3797,285 +3764,6 @@ class _MemberSearchDialogState extends State<_MemberSearchDialog> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _RecordPaymentDialog extends ConsumerStatefulWidget {
-  final String? preSelectedMemberId;
-
-  const _RecordPaymentDialog({this.preSelectedMemberId});
-
-  @override
-  ConsumerState<_RecordPaymentDialog> createState() =>
-      _RecordPaymentDialogState();
-}
-
-class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _amountCtrl = TextEditingController();
-  final _descriptionCtrl = TextEditingController();
-  final _paymentId = const Uuid().v4();
-  final _paidAt = DateTime.now();
-  String _method = 'cash';
-  String? _selectedMemberId;
-  String? _selectedMembershipId;
-  String? _selectedPlanId;
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedMemberId = widget.preSelectedMemberId;
-  }
-
-  @override
-  void dispose() {
-    _amountCtrl.dispose();
-    _descriptionCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleSave() async {
-    if (_isSaving) return;
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
-
-    try {
-      final data = ref.read(dataSyncServiceProvider);
-      String? linkedMembershipId;
-      String? memberName;
-
-      if (_selectedMemberId != null) {
-        final member =
-            data.members.where((m) => m.id == _selectedMemberId).firstOrNull;
-        if (member == null) {
-          throw StateError('العضو المحدد لم يعد متاحاً.');
-        }
-        memberName = member.fullName;
-        final selectedMembership = data.memberships
-            .where((membership) =>
-                membership.id == _selectedMembershipId &&
-                membership.memberId == _selectedMemberId &&
-                membership.status == 'active' &&
-                membership.deletedAt == null)
-            .firstOrNull;
-        if (_selectedMembershipId != null && selectedMembership == null) {
-          throw StateError('الاشتراك المحدد لم يعد متاحاً.');
-        }
-        linkedMembershipId = selectedMembership?.id;
-      }
-
-      final selectedPlan = data.activePlans
-          .where((plan) => plan.id == _selectedPlanId)
-          .firstOrNull;
-      if (_selectedPlanId != null && selectedPlan == null) {
-        throw StateError('الباقة المحددة لم تعد متاحة.');
-      }
-      final noteText = [
-        if (memberName != null && linkedMembershipId == null)
-          'العضو: $memberName',
-        if (selectedPlan != null) 'الباقة: ${selectedPlan.name}',
-        if (_descriptionCtrl.text.trim().isNotEmpty)
-          _descriptionCtrl.text.trim(),
-      ].join(' • ');
-
-      final service = ref.read(dataSyncServiceProvider.notifier);
-      await service.recordPayment(
-        paymentId: _paymentId,
-        membershipId: linkedMembershipId,
-        amount: double.parse(_amountCtrl.text),
-        paymentMethod: _method,
-        paidAt: _paidAt,
-        notes: noteText.isEmpty ? null : noteText,
-      );
-      final isPending = await service.isPaymentPending(_paymentId);
-
-      if (!mounted) return;
-      Navigator.of(context).pop();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                isPending
-                    ? 'تم حفظ الدفعة محلياً، ولم يؤكدها الخادم بعد.'
-                    : 'تم تسجيل الدفعة بنجاح!',
-                textDirection: ui.TextDirection.rtl),
-            backgroundColor: isPending
-                ? context.appPalette.warning
-                : context.appPalette.success),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('فشل تسجيل الدفعة: $e',
-                textDirection: ui.TextDirection.rtl),
-            backgroundColor: context.appPalette.error),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final data = ref.watch(dataSyncServiceProvider);
-    final selectedMemberMemberships = data.memberships
-        .where((membership) =>
-            membership.memberId == _selectedMemberId &&
-            membership.status == 'active' &&
-            membership.deletedAt == null)
-        .toList();
-    if (!selectedMemberMemberships
-        .any((membership) => membership.id == _selectedMembershipId)) {
-      _selectedMembershipId = null;
-    }
-
-    return Directionality(
-      textDirection: ui.TextDirection.rtl,
-      child: AlertDialog(
-        scrollable: true,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        backgroundColor: context.appPalette.surfaceCard,
-        title: const Text('تسجيل دفعة إيراد جديدة'),
-        content: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (data.members.isNotEmpty || _selectedMemberId != null)
-                _SearchableMemberPicker(
-                  members: data.members,
-                  selectedMemberId: _selectedMemberId,
-                  onChanged: (value) => setState(() {
-                    _selectedMemberId = value;
-                    _selectedMembershipId = null;
-                  }),
-                ),
-              const SizedBox(height: 12),
-              if (_selectedMemberId != null)
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _selectedMembershipId ?? '',
-                  decoration: const InputDecoration(
-                    labelText: 'ربط باشتراك قائم (اختياري)',
-                  ),
-                  items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('دفعة عامة للعضو'),
-                    ),
-                    ...selectedMemberMemberships.map((membership) {
-                      final planName = data.plans
-                          .where((plan) => plan.id == membership.planId)
-                          .firstOrNull
-                          ?.name;
-                      final label = planName == null
-                          ? 'اشتراك حتى ${RtlSupport.formatDate(membership.endDate)}'
-                          : '$planName • ${RtlSupport.formatDate(membership.endDate)}';
-                      return DropdownMenuItem(
-                        value: membership.id,
-                        child: Text(label,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                      );
-                    }),
-                  ],
-                  onChanged: (value) => setState(
-                    () => _selectedMembershipId =
-                        value == null || value.isEmpty ? null : value,
-                  ),
-                ),
-              if (_selectedMemberId != null) const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _selectedPlanId ?? '',
-                decoration: const InputDecoration(
-                  labelText: 'الباقة (اختيارية، لا تنشئ اشتراكاً)',
-                ),
-                items: [
-                  const DropdownMenuItem(
-                    value: '',
-                    child: Text('بدون باقة'),
-                  ),
-                  ...data.activePlans.map(
-                    (plan) => DropdownMenuItem(
-                      value: plan.id,
-                      child: Text('${plan.name} (${plan.price} ج.م)',
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(
-                  () => _selectedPlanId =
-                      value == null || value.isEmpty ? null : value,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _amountCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'قيمة المبلغ المستلم (ج.م) *'),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  final amount = double.tryParse(value ?? '');
-                  return amount == null || !amount.isFinite || amount <= 0
-                      ? 'أدخل مبلغاً أكبر من صفر'
-                      : null;
-                },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _method,
-                decoration: const InputDecoration(labelText: 'طريقة الدفع'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'cash',
-                    child: Text('نقدي (Cash)',
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                  DropdownMenuItem(
-                    value: 'card',
-                    child: Text('فيزا / شبكة (Card)',
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                  DropdownMenuItem(
-                    value: 'vodafone_cash',
-                    child: Text('فودافون كاش / محفظة',
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _method = val);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descriptionCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'وصف أو ملاحظات إضافية'),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-              child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: _isSaving ? null : _handleSave,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('تسجيل الدفعة'),
-          ),
-        ],
       ),
     );
   }
@@ -4580,19 +4268,5 @@ class _AddMembershipDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const _CreateMembershipDialog();
-  }
-}
-
-// ==========================================
-// --- ADD PAYMENT DIALOG ---
-// ==========================================
-class _AddPaymentDialog extends StatelessWidget {
-  final String? preSelectedMemberId;
-
-  const _AddPaymentDialog() : preSelectedMemberId = null;
-
-  @override
-  Widget build(BuildContext context) {
-    return _RecordPaymentDialog(preSelectedMemberId: preSelectedMemberId);
   }
 }

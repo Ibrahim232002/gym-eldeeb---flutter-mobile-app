@@ -581,6 +581,18 @@ class DataSyncService extends ChangeNotifier {
       final rawMembership =
           action.payload['membership'] as Map<String, dynamic>;
       final queuedMembership = Membership.fromJson(rawMembership);
+      final rawPayment = action.payload['payment'];
+      if (rawPayment is! Map<String, dynamic>) {
+        throw StateError(
+            'تعذر مزامنة الاشتراك لأن طلبه لا يحتوي على الدفعة الأولية.');
+      }
+      final queuedPayment = Payment.fromJson(rawPayment);
+      if (queuedPayment.membershipId != queuedMembership.id ||
+          queuedPayment.gymId != queuedMembership.gymId ||
+          queuedPayment.amount != queuedMembership.price) {
+        throw StateError(
+            'تعذر مزامنة الاشتراك لأن بيانات الدفعة الأولية غير متطابقة.');
+      }
       final queuedPlanId = queuedMembership.planId;
       if (queuedPlanId != null) {
         final activePlan = await _supabase
@@ -595,13 +607,28 @@ class DataSyncService extends ChangeNotifier {
               'تعذر مزامنة الاشتراك لأن الباقة أصبحت معطلة أو محذوفة.');
         }
       }
-      await _supabase.rpc<Map<String, dynamic>>(
+      final result = await _supabase.rpc<Map<String, dynamic>>(
         'create_membership_with_initial_payment',
         params: {
           'p_membership': action.payload['membership'],
           'p_payment': action.payload['payment'],
         },
       );
+      final confirmedMembership = result['membership'] is Map
+          ? Membership.fromJson(
+              Map<String, dynamic>.from(result['membership'] as Map))
+          : null;
+      final confirmedPayment = result['payment'] is Map
+          ? Payment.fromJson(
+              Map<String, dynamic>.from(result['payment'] as Map))
+          : null;
+      if (confirmedMembership?.id != queuedMembership.id ||
+          confirmedPayment?.id != queuedPayment.id ||
+          confirmedPayment?.membershipId != queuedMembership.id ||
+          confirmedPayment?.amount != queuedMembership.price ||
+          confirmedPayment?.paymentMethod != queuedPayment.paymentMethod) {
+        throw StateError('لم يؤكد الخادم الاشتراك والدفعة الأولية معاً.');
+      }
       return;
     }
 
@@ -1178,8 +1205,8 @@ class DataSyncService extends ChangeNotifier {
     required DateTime startDate,
     required DateTime endDate,
     required double price,
-    double? initialPaymentAmount,
-    String paymentMethod = 'cash',
+    required double initialPaymentAmount,
+    required String paymentMethod,
     DateTime? paymentDate,
     String? paymentNotes,
   }) async {
@@ -1205,7 +1232,7 @@ class DataSyncService extends ChangeNotifier {
     required DateTime startDate,
     required DateTime endDate,
     required double price,
-    required double? initialPaymentAmount,
+    required double initialPaymentAmount,
     required String paymentMethod,
     required DateTime? paymentDate,
     required String? paymentNotes,
@@ -1222,16 +1249,22 @@ class DataSyncService extends ChangeNotifier {
         DateTime.utc(startDate.year, startDate.month, startDate.day);
     final endDay = DateTime.utc(
         actualEndDate.year, actualEndDate.month, actualEndDate.day);
-    if (!price.isFinite || price < 0) {
-      throw ArgumentError.value(price, 'price', 'يجب أن يكون سعراً صالحاً.');
+    if (!price.isFinite || price <= 0) {
+      throw ArgumentError.value(
+          price, 'price', 'يجب أن يكون السعر أكبر من صفر.');
     }
-    if (initialPaymentAmount != null &&
-        (!initialPaymentAmount.isFinite || initialPaymentAmount <= 0)) {
+    if (!initialPaymentAmount.isFinite ||
+        initialPaymentAmount <= 0 ||
+        initialPaymentAmount != price) {
       throw ArgumentError.value(
         initialPaymentAmount,
         'initialPaymentAmount',
-        'يجب أن تكون الدفعة أكبر من صفر.',
+        'يجب أن تساوي الدفعة السعر الفعلي للاشتراك.',
       );
+    }
+    if (!{'cash', 'card', 'vodafone_cash'}.contains(paymentMethod)) {
+      throw ArgumentError.value(
+          paymentMethod, 'paymentMethod', 'طريقة الدفع المحددة غير مدعومة.');
     }
     if (startDay.isAfter(endDay)) {
       throw ArgumentError(
@@ -1267,23 +1300,21 @@ class DataSyncService extends ChangeNotifier {
       throw const DuplicateActiveMembershipException();
     }
 
-    final payment = initialPaymentAmount == null
-        ? null
-        : Payment(
-            id: const Uuid().v4(),
-            gymId: gymId,
-            membershipId: newMembership.id,
-            amount: initialPaymentAmount,
-            paymentMethod: paymentMethod,
-            paidAt: paymentDate ?? DateTime.now(),
-            recordedBy: _actorUserId,
-            notes: paymentNotes?.trim(),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+    final payment = Payment(
+      id: const Uuid().v4(),
+      gymId: gymId,
+      membershipId: newMembership.id,
+      amount: initialPaymentAmount,
+      paymentMethod: paymentMethod,
+      paidAt: paymentDate ?? DateTime.now(),
+      recordedBy: _actorUserId,
+      notes: paymentNotes?.trim(),
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
     final queuePayload = {
       'membership': newMembership.toJson(),
-      'payment': payment?.toJson(),
+      'payment': payment.toJson(),
     };
 
     if (!online) {
@@ -1327,7 +1358,7 @@ class DataSyncService extends ChangeNotifier {
         'create_membership_with_initial_payment',
         params: {
           'p_membership': newMembership.toJson(),
-          'p_payment': payment?.toJson(),
+          'p_payment': payment.toJson(),
         },
       );
       final result = response;
@@ -1337,17 +1368,21 @@ class DataSyncService extends ChangeNotifier {
           ? Payment.fromJson(
               Map<String, dynamic>.from(result['payment'] as Map))
           : null;
+      if (confirmedPayment == null ||
+          confirmedPayment.membershipId != confirmedMembership.id ||
+          confirmedPayment.amount != price ||
+          confirmedPayment.paymentMethod != paymentMethod) {
+        throw StateError('لم يؤكد الخادم الدفعة الأولية المرتبطة بالاشتراك.');
+      }
 
       _memberships = [
         confirmedMembership,
         ..._memberships.where((item) => item.id != confirmedMembership.id),
       ];
-      if (confirmedPayment != null) {
-        _payments = [
-          confirmedPayment,
-          ..._payments.where((item) => item.id != confirmedPayment.id),
-        ];
-      }
+      _payments = [
+        confirmedPayment,
+        ..._payments.where((item) => item.id != confirmedPayment.id),
+      ];
       await _persistMembershipAndPaymentCache();
       notifyListeners();
       return MembershipCreationResult(
@@ -1400,70 +1435,6 @@ class DataSyncService extends ChangeNotifier {
 
   // --- Payments CRUD ---
 
-  Future<Payment> recordPayment({
-    String? paymentId,
-    required String? membershipId,
-    required double amount,
-    required String paymentMethod,
-    required DateTime paidAt,
-    String? notes,
-  }) async {
-    if (!amount.isFinite || amount <= 0) {
-      throw ArgumentError.value(amount, 'amount', 'يجب أن يكون أكبر من صفر.');
-    }
-    final gymId = await requireGymId();
-
-    final newPayment = Payment(
-      id: paymentId ?? const Uuid().v4(),
-      gymId: gymId,
-      membershipId: membershipId,
-      amount: amount,
-      paymentMethod: paymentMethod,
-      paidAt: paidAt,
-      recordedBy: _actorUserId,
-      notes: notes?.trim(),
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-
-    final existingPayment =
-        _payments.where((payment) => payment.id == newPayment.id).firstOrNull;
-    if (existingPayment != null &&
-        (existingPayment.gymId != newPayment.gymId ||
-            existingPayment.membershipId != newPayment.membershipId ||
-            existingPayment.amount != newPayment.amount ||
-            existingPayment.paymentMethod != newPayment.paymentMethod ||
-            existingPayment.paidAt != newPayment.paidAt ||
-            existingPayment.recordedBy != newPayment.recordedBy ||
-            existingPayment.notes != newPayment.notes)) {
-      throw StateError('تم استخدام معرّف الدفعة لعملية مختلفة.');
-    }
-    final paymentToRecord = existingPayment ?? newPayment;
-    if (existingPayment == null) {
-      _payments = [newPayment, ..._payments];
-      notifyListeners();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          _keyPayments, jsonEncode(_payments.map((p) => p.toJson()).toList()));
-    }
-
-    final online = await _networkInfo.isConnected;
-    if (online) {
-      try {
-        await _supabase
-            .from(SupabaseConstants.tablePayments)
-            .upsert(paymentToRecord.toJson());
-      } catch (error) {
-        await _queuePaymentWrite(paymentToRecord, error: error);
-      }
-    } else {
-      await _queuePaymentWrite(paymentToRecord);
-    }
-
-    return paymentToRecord;
-  }
-
   Future<bool> isPaymentPending(String paymentId) async {
     final queue = await _getPendingQueue();
     return queue.any((action) =>
@@ -1484,18 +1455,6 @@ class DataSyncService extends ChangeNotifier {
       }
       return false;
     });
-  }
-
-  Future<void> _queuePaymentWrite(Payment payment, {Object? error}) async {
-    final queue = await _getPendingQueue();
-    if (queue.any((action) =>
-        action.table == 'payments' &&
-        action.action == 'create' &&
-        action.payload['id'] == payment.id)) {
-      return;
-    }
-    await _queuePendingWrite('payments', 'create', payment.toJson(),
-        error: error);
   }
 
   Future<void> editMembership(Membership updated) async {
