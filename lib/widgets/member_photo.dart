@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,6 +9,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/constants/supabase_constants.dart';
 import '../core/theme/app_colors.dart';
+
+Size memberPhotoPreviewSize(Size imageSize, Size maxSize) {
+  if (imageSize.width <= 0 || imageSize.height <= 0) {
+    return Size.zero;
+  }
+  final scale = min(
+    maxSize.width / imageSize.width,
+    maxSize.height / imageSize.height,
+  );
+  return Size(imageSize.width * scale, imageSize.height * scale);
+}
 
 Future<Uint8List> compressMemberPhoto(Uint8List sourceBytes) async {
   var dimension = 1280;
@@ -131,16 +144,104 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
   }
 
   Widget _previewImage(ImageProvider<Object> imageProvider) {
-    return LayoutBuilder(
-      builder: (context, constraints) => InteractiveViewer(
-        child: SizedBox(
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-          child: Image(
-            image: imageProvider,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => _fallback(context, radius: 72),
+    return FutureBuilder<Size>(
+      future: _imageDimensions(imageProvider),
+      builder: (context, snapshot) {
+        final media = MediaQuery.of(context);
+        final maxWidth = (media.size.width - 32).clamp(1.0, 460.0);
+        final maxHeight = (media.size.height - media.viewInsets.bottom - 32)
+            .clamp(1.0, 620.0);
+
+        if (snapshot.hasError) {
+          return _photoPreviewFrame(
+            width: 220,
+            height: 180,
+            child: const Center(child: Text('تعذر تحميل الصورة.')),
+          );
+        }
+        if (!snapshot.hasData) {
+          return _photoPreviewFrame(
+            width: 180,
+            height: 180,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final imageSize = snapshot.data!;
+        final fittedSize = memberPhotoPreviewSize(
+          imageSize,
+          Size(maxWidth, maxHeight),
+        );
+        return _photoPreviewFrame(
+          width: fittedSize.width,
+          height: fittedSize.height,
+          child: InteractiveViewer(
+            child: Image(
+              image: imageProvider,
+              width: fittedSize.width,
+              height: fittedSize.height,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Center(child: Text('تعذر تحميل الصورة.')),
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  Future<Size> _imageDimensions(ImageProvider<Object> provider) {
+    final completer = Completer<Size>();
+    final stream = provider.resolve(const ImageConfiguration());
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (imageInfo, _) {
+        if (!completer.isCompleted) {
+          completer.complete(Size(
+            imageInfo.image.width.toDouble(),
+            imageInfo.image.height.toDouble(),
+          ));
+        }
+        imageInfo.dispose();
+        stream.removeListener(listener);
+      },
+      onError: (Object error, StackTrace? stackTrace) {
+        if (!completer.isCompleted) completer.completeError(error, stackTrace);
+        stream.removeListener(listener);
+      },
+    );
+    stream.addListener(listener);
+    return completer.future;
+  }
+
+  Widget _photoPreviewFrame({
+    required double width,
+    required double height,
+    required Widget child,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: Colors.black, child: child),
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  tooltip: 'إغلاق معاينة الصورة',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -150,39 +251,49 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
     final signedUrl = _signedUrl;
     await showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420, maxHeight: 520),
-            child: Center(
-              child: widget.photoBytes != null
-                  ? _previewImage(MemoryImage(widget.photoBytes!))
-                  : signedUrl == null
-                      ? _fallback(context, radius: 100)
-                      : FutureBuilder<String>(
-                          future: signedUrl,
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError) {
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _fallback(context, radius: 72),
-                                  const SizedBox(height: 12),
-                                  const Text('تعذر تحميل الصورة.'),
-                                ],
-                              );
-                            }
-                            if (!snapshot.hasData) {
-                              return const CircularProgressIndicator();
-                            }
-                            return _previewImage(NetworkImage(snapshot.data!));
-                          },
-                        ),
-            ),
+      barrierDismissible: true,
+      builder: (context) {
+        final media = MediaQuery.of(context);
+        return Dialog(
+          constraints: BoxConstraints(
+            maxWidth: (media.size.width - 32).clamp(1.0, 460.0).toDouble(),
           ),
-        ),
-      ),
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: widget.photoBytes != null
+              ? _previewImage(MemoryImage(widget.photoBytes!))
+              : signedUrl == null
+                  ? _photoPreviewFrame(
+                      width: 200,
+                      height: 200,
+                      child: Center(child: _fallback(context, radius: 72)),
+                    )
+                  : FutureBuilder<String>(
+                      future: signedUrl,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return _photoPreviewFrame(
+                            width: 220,
+                            height: 180,
+                            child: const Center(
+                              child: Text('تعذر تحميل الصورة.'),
+                            ),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return _photoPreviewFrame(
+                            width: 180,
+                            height: 180,
+                            child: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+                        return _previewImage(NetworkImage(snapshot.data!));
+                      },
+                    ),
+        );
+      },
     );
   }
 

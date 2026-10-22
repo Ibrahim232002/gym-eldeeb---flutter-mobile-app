@@ -1025,16 +1025,18 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                                 icon: Icon(Icons.chat_bubble_outline_rounded,
                                     color: context.appPalette.success),
                                 tooltip: 'مراسلة واتساب',
-                                onPressed: () => _openWhatsapp(member),
+                                onPressed: () =>
+                                    _openMemberWhatsapp(context, ref, member),
                               ),
                             IconButton(
                               icon: Icon(Icons.arrow_forward_ios_rounded,
                                   size: 16, color: context.appPalette.primary),
-                              onPressed: () => _showMemberDetails(member),
+                              onPressed: () =>
+                                  _showMemberDetails(context, member),
                             ),
                           ],
                         ),
-                        onTap: () => _showMemberDetails(member),
+                        onTap: () => _showMemberDetails(context, member),
                       ),
                     );
                   },
@@ -1078,103 +1080,111 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
       backgroundColor: context.appPalette.surface,
     );
   }
+}
 
-  void _openWhatsapp(Member member) {
-    if (member.phone == null || member.phone!.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('هذا العضو ليس لديه رقم هاتف مسجل.'),
-            backgroundColor: context.appPalette.error),
-      );
-      return;
-    }
-
-    final data = ref.read(dataSyncServiceProvider);
-    final activeMembership = data.memberships
-        .where((m) => m.memberId == member.id && !m.isExpired)
-        .firstOrNull;
-    final activePlanId = activeMembership?.planId;
-    final planName = activePlanId != null
-        ? data.plans.where((p) => p.id == activePlanId).firstOrNull?.name ??
-            'الاشتراك الحالي'
-        : 'الاشتراك الشهري';
-
-    final dueAmount = activeMembership?.price ?? 0.0;
-    final endDateStr = activeMembership != null
-        ? RtlSupport.formatDate(activeMembership.endDate)
-        : 'نهاية الشهر';
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.appPalette.surfaceCard,
-      builder: (ctx) => Directionality(
-        textDirection: ui.TextDirection.rtl,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('مراسلة ${member.fullName} عبر واتساب:',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(height: 16),
-              ListTile(
-                leading:
-                    Icon(Icons.chat_rounded, color: context.appPalette.success),
-                title: const Text('رسالة ترحيبية وتواصل عام'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  WhatsappService.launchWhatsApp(
-                    phone: member.phone!,
-                    message: WhatsappService.getGeneralContact(member.fullName),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.payment_rounded,
-                    color: context.appPalette.primary),
-                title: Text(
-                    'تذكير بمستحقات الاشتراك (${RtlSupport.formatEgp(dueAmount)})'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  WhatsappService.launchWhatsApp(
-                    phone: member.phone!,
-                    message: WhatsappService.getPaymentReminder(
-                        member.fullName, dueAmount),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.timer_rounded,
-                    color: context.appPalette.warning),
-                title: Text('تذكير بانتهاء الاشتراك ($endDateStr)'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  WhatsappService.launchWhatsApp(
-                    phone: member.phone!,
-                    message: WhatsappService.getExpiryReminder(
-                        member.fullName, planName, endDateStr),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
+void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
+  if (member.phone == null || member.phone!.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('هذا العضو ليس لديه رقم هاتف مسجل.'),
+        backgroundColor: context.appPalette.error,
       ),
     );
+    return;
   }
 
-  void _showMemberDetails(Member member) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.appPalette.surfaceCard,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _MemberDetailsBottomSheet(member: member),
-    );
-  }
+  final data = ref.read(dataSyncServiceProvider);
+  final activeMembership = data.memberships
+      .where((membership) =>
+          membership.memberId == member.id && !membership.isExpired)
+      .firstOrNull;
+  final activePlanId = activeMembership?.planId;
+  final planName = activePlanId != null
+      ? data.plans.where((plan) => plan.id == activePlanId).firstOrNull?.name ??
+          'الاشتراك الحالي'
+      : 'الاشتراك الشهري';
+  final dueAmount = activeMembership?.price ?? 0.0;
+  final endDate = activeMembership != null
+      ? RtlSupport.formatDate(activeMembership.endDate)
+      : 'نهاية الشهر';
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: context.appPalette.surfaceCard,
+    builder: (sheetContext) => Directionality(
+      textDirection: ui.TextDirection.rtl,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'مراسلة ${member.fullName} عبر واتساب:',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading:
+                  Icon(Icons.chat_rounded, color: context.appPalette.success),
+              title: const Text('رسالة ترحيبية وتواصل عام'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                WhatsappService.launchWhatsApp(
+                  phone: member.phone!,
+                  message: WhatsappService.getGeneralContact(member.fullName),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.payment_rounded,
+                  color: context.appPalette.primary),
+              title: Text(
+                  'تذكير بمستحقات الاشتراك (${RtlSupport.formatEgp(dueAmount)})'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                WhatsappService.launchWhatsApp(
+                  phone: member.phone!,
+                  message: WhatsappService.getPaymentReminder(
+                    member.fullName,
+                    dueAmount,
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading:
+                  Icon(Icons.timer_rounded, color: context.appPalette.warning),
+              title: Text('تذكير بانتهاء الاشتراك ($endDate)'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                WhatsappService.launchWhatsApp(
+                  phone: member.phone!,
+                  message: WhatsappService.getExpiryReminder(
+                    member.fullName,
+                    planName,
+                    endDate,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+void _showMemberDetails(BuildContext context, Member member) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: context.appPalette.surfaceCard,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => _MemberDetailsBottomSheet(member: member),
+  );
 }
 
 // ==========================================
@@ -1461,6 +1471,21 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
       final service = ref.read(dataSyncServiceProvider.notifier);
       final oldPhotoPath = widget.member.photoPath;
       String? nextPhotoPath = oldPhotoPath;
+      final updatedMember = widget.member.copyWith(
+        fullName: _nameController.text.trim(),
+        phone: _phoneController.text.trim().isNotEmpty
+            ? _phoneController.text.trim()
+            : null,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
+        joinDate: _joinDate,
+        isActive: _isActive,
+      );
+      await service.validateMember(
+        candidate: updatedMember,
+        excludingMemberId: widget.member.id,
+      );
       if (_removePhoto) {
         nextPhotoPath = null;
       } else if (_photoBytes != null) {
@@ -1475,16 +1500,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
       }
 
       final persistedRemotely = await service.editMember(
-        widget.member.copyWith(
-          fullName: _nameController.text.trim(),
-          phone: _phoneController.text.trim().isNotEmpty
-              ? _phoneController.text.trim()
-              : null,
-          notes: _notesController.text.trim().isNotEmpty
-              ? _notesController.text.trim()
-              : null,
-          joinDate: _joinDate,
-          isActive: _isActive,
+        updatedMember.copyWith(
           photoPath: nextPhotoPath,
           clearPhotoPath: _removePhoto,
         ),
@@ -1747,8 +1763,10 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
             _buildDetailItem(context, 'ملاحظات الكابتن',
                 member.notes ?? 'لا توجد ملاحظات مدونة.'),
             const Divider(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 4,
               children: [
                 const Text('سجل الاشتراكات والباقات',
                     style:
@@ -1815,8 +1833,10 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 );
               }),
             const Divider(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 4,
               children: [
                 const Text('سجل المدفوعات والإيصالات',
                     style:
@@ -2693,13 +2713,47 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
                   subtitle: Text(
                     'تاريخ الانتهاء: ${RtlSupport.formatDate(membership.endDate)}',
                   ),
-                  trailing: Text(
-                    remainingDays == 0 ? 'اليوم' : 'متبقي $remainingDays يوم',
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
-                      color: context.appPalette.warning,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        remainingDays == 0
+                            ? 'اليوم'
+                            : 'متبقي $remainingDays يوم',
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          color: context.appPalette.warning,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (member?.phone?.trim().isNotEmpty == true)
+                        IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                              width: 36, height: 40),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'مراسلة واتساب',
+                          icon: Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 19,
+                            color: context.appPalette.success,
+                          ),
+                          onPressed: () =>
+                              _openMemberWhatsapp(context, ref, member!),
+                        ),
+                      if (member != null)
+                        IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                              width: 36, height: 40),
+                          padding: EdgeInsets.zero,
+                          tooltip: 'عرض تفاصيل العضو',
+                          icon: Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 16,
+                            color: context.appPalette.primary,
+                          ),
+                          onPressed: () => _showMemberDetails(context, member),
+                        ),
+                    ],
                   ),
                 ),
               );
@@ -4017,9 +4071,6 @@ class _SettingsTab extends ConsumerWidget {
                 children: [
                   _buildSettingRow(context, 'اسم الصالة (العربي)',
                       auth.gym?.name ?? 'جيم الديب'),
-                  const Divider(),
-                  _buildSettingRow(
-                      context, 'اسم الصالة (English)', 'Gym ElDeeb'),
                 ],
               ),
             ),

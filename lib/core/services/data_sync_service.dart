@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../auth/auth_provider.dart';
 import '../constants/supabase_constants.dart';
 import '../network/network_info.dart';
+import '../utils/member_identity.dart';
 
 import '../../data/models/member.dart';
 import '../../data/models/membership_plan.dart';
@@ -22,6 +23,51 @@ class DuplicateActiveMembershipException implements Exception {
 
   @override
   String toString() => 'هذا العضو لديه اشتراك ساري خلال هذه الفترة.';
+}
+
+class DuplicateMemberException implements Exception {
+  final DuplicateMemberField field;
+
+  const DuplicateMemberException(this.field);
+
+  @override
+  String toString() => switch (field) {
+        DuplicateMemberField.name => 'اسم العضو مسجل بالفعل في هذا الجيم.',
+        DuplicateMemberField.phone => 'رقم الموبايل مسجل بالفعل في هذا الجيم.',
+        DuplicateMemberField.unknown =>
+          'اسم العضو أو رقم الهاتف مستخدم بالفعل في هذه الصالة.',
+      };
+}
+
+DuplicateMemberField? duplicateMemberFieldForPostgrestException(
+  PostgrestException error,
+) {
+  if (error.code != '23505') return null;
+
+  final details = '${error.message} ${error.details ?? ''} ${error.hint ?? ''}'
+      .toLowerCase();
+  if (details.contains('members_unique_active_phone_per_gym') ||
+      details.contains('members_unique_phone_per_gym')) {
+    return DuplicateMemberField.phone;
+  }
+  if (details.contains('members_unique_active_name_per_gym') ||
+      details.contains('members_unique_name_per_gym')) {
+    return DuplicateMemberField.name;
+  }
+  return null;
+}
+
+class DuplicateMemberExceptionWithCleanup extends DuplicateMemberException {
+  final Object cleanupError;
+
+  const DuplicateMemberExceptionWithCleanup(
+    super.field,
+    this.cleanupError,
+  );
+
+  @override
+  String toString() =>
+      '${super.toString()} تعذر حذف الصورة غير المرتبطة: $cleanupError';
 }
 
 class MembershipCreationGuard {
@@ -198,6 +244,7 @@ class DataSyncService extends ChangeNotifier {
         '42P01', // undefined_table
         '23502', // not_null_violation
         '23503', // foreign_key_violation
+        '23505', // unique_violation
         '23514', // check_violation
         '23522', // numeric_value_out_of_range
         '23P01', // exclusion_violation: overlapping active membership
@@ -426,11 +473,22 @@ class DataSyncService extends ChangeNotifier {
       var failedCount = 0;
       var blockedCount = 0;
       var duplicateMembershipCount = 0;
+      var duplicateMemberNameCount = 0;
+      var duplicateMemberPhoneCount = 0;
 
       for (final item in queue) {
         if (!forceRetry && item.retryCount >= _maxAutomaticRetries) {
           remaining.add(item);
           blockedCount++;
+          if (item.table == 'members') {
+            final duplicateField =
+                _memberUniqueViolationFieldInText(item.lastError);
+            if (duplicateField == DuplicateMemberField.name) {
+              duplicateMemberNameCount++;
+            } else if (duplicateField == DuplicateMemberField.phone) {
+              duplicateMemberPhoneCount++;
+            }
+          }
           if (item.lastError?.contains('23P01') == true ||
               item.lastError?.contains('ACTIVE_MEMBERSHIP_OVERLAP') == true) {
             duplicateMembershipCount++;
@@ -443,6 +501,14 @@ class DataSyncService extends ChangeNotifier {
         } catch (e) {
           if (e is PostgrestException && e.code == '23P01') {
             duplicateMembershipCount++;
+          }
+          if (e is PostgrestException && item.table == 'members') {
+            final duplicateField = duplicateMemberFieldForPostgrestException(e);
+            if (duplicateField == DuplicateMemberField.name) {
+              duplicateMemberNameCount++;
+            } else if (duplicateField == DuplicateMemberField.phone) {
+              duplicateMemberPhoneCount++;
+            }
           }
           final permanent = _isPermanentSyncError(e);
           final retryCount =
@@ -472,6 +538,14 @@ class DataSyncService extends ChangeNotifier {
         if (duplicateMembershipCount > 0) {
           _syncErrorMessage =
               'تعذر تأكيد اشتراك معلّق لأن للعضو اشتراكاً سارياً في الفترة نفسها. راجع الطلب قبل إعادة المحاولة.';
+        } else if (duplicateMemberNameCount > 0 ||
+            duplicateMemberPhoneCount > 0) {
+          _syncErrorMessage = [
+            if (duplicateMemberNameCount > 0)
+              'اسم العضو مسجل بالفعل في هذا الجيم.',
+            if (duplicateMemberPhoneCount > 0)
+              'رقم الموبايل مسجل بالفعل في هذا الجيم.',
+          ].join('\n');
         } else if (blockedCount > 0) {
           _syncErrorMessage =
               'هناك $blockedCount عملية معلقة بسبب خطأ دائم. راجع الصلاحيات أو البيانات ثم استخدم المزامنة اليدوية لإعادة المحاولة.';
@@ -664,21 +738,13 @@ class DataSyncService extends ChangeNotifier {
   }) async {
     final gymId = await requireGymId();
     final memberId = const Uuid().v4();
-    final photoPath = photoBytes == null
-        ? null
-        : await uploadMemberPhoto(
-            memberId: memberId,
-            photoBytes: photoBytes,
-            extension: photoExtension,
-          );
-
-    final newMember = Member(
+    final online = await _networkInfo.isConnected;
+    var newMember = Member(
       id: memberId,
       gymId: gymId,
       fullName: fullName.trim(),
       phone: phone?.trim(),
       notes: notes?.trim(),
-      photoPath: photoPath,
       joinDate: joinDate,
       isActive: true,
       createdBy: _actorUserId,
@@ -687,23 +753,38 @@ class DataSyncService extends ChangeNotifier {
       syncVersion: 1,
     );
 
-    // 1. Immediately update in-memory list so UI updates instantly without restart
-    _members = [newMember, ..._members.where((m) => m.id != newMember.id)];
-    notifyListeners();
+    await _ensureMemberUnique(newMember, online: online);
+    if (photoBytes != null) {
+      final photoPath = await uploadMemberPhoto(
+        memberId: memberId,
+        photoBytes: photoBytes,
+        extension: photoExtension,
+      );
+      newMember = newMember.copyWith(photoPath: photoPath);
+    }
 
-    // 2. Persist to local cache
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _keyMembers, jsonEncode(_members.map((m) => m.toJson()).toList()));
-
-    // 3. Persist to Supabase or queue if offline
-    final online = await _networkInfo.isConnected;
     if (online) {
       try {
         await _supabase
             .from(SupabaseConstants.tableMembers)
             .upsert(newMember.toJson());
       } catch (e) {
+        if (e is PostgrestException && e.code == '23505') {
+          final duplicate = _memberUniqueViolation(e);
+          final photoPath = newMember.photoPath;
+          if (photoPath != null) {
+            try {
+              await deleteMemberPhoto(photoPath);
+            } on Exception catch (cleanupError) {
+              throw DuplicateMemberExceptionWithCleanup(
+                duplicate.field,
+                cleanupError,
+              );
+            }
+          }
+          throw duplicate;
+        }
+        await _saveMemberLocally(newMember);
         await _queuePendingWrite(
           'members',
           'create',
@@ -712,10 +793,26 @@ class DataSyncService extends ChangeNotifier {
         );
       }
     } else {
+      await _saveMemberLocally(newMember);
       await _queuePendingWrite('members', 'create', newMember.toJson());
     }
 
+    if (online && !_members.any((member) => member.id == newMember.id)) {
+      await _saveMemberLocally(newMember);
+    }
     return newMember;
+  }
+
+  Future<void> validateMember({
+    required Member candidate,
+    String? excludingMemberId,
+  }) async {
+    final online = await _networkInfo.isConnected;
+    await _ensureMemberUnique(
+      candidate,
+      online: online,
+      excludingMemberId: excludingMemberId,
+    );
   }
 
   Future<bool> editMember(
@@ -723,15 +820,12 @@ class DataSyncService extends ChangeNotifier {
     String? photoPathToDelete,
   }) async {
     final edited = updated.copyWith(updatedAt: DateTime.now());
-
-    _members = _members.map((m) => m.id == edited.id ? edited : m).toList();
-    notifyListeners();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _keyMembers, jsonEncode(_members.map((m) => m.toJson()).toList()));
-
     final online = await _networkInfo.isConnected;
+    await _ensureMemberUnique(
+      edited,
+      online: online,
+      excludingMemberId: edited.id,
+    );
     var persistedRemotely = false;
     if (online) {
       try {
@@ -744,6 +838,9 @@ class DataSyncService extends ChangeNotifier {
         }
         persistedRemotely = true;
       } catch (error) {
+        if (error is PostgrestException && error.code == '23505') {
+          throw _memberUniqueViolation(error);
+        }
         await _queueMemberUpdate(
           edited,
           photoPathToDelete: photoPathToDelete,
@@ -756,7 +853,113 @@ class DataSyncService extends ChangeNotifier {
         photoPathToDelete: photoPathToDelete,
       );
     }
+    await _saveMemberLocally(edited, insertIfMissing: false);
     return persistedRemotely;
+  }
+
+  Future<void> _saveMemberLocally(
+    Member member, {
+    bool insertIfMissing = true,
+  }) async {
+    if (insertIfMissing) {
+      _members = [member, ..._members.where((item) => item.id != member.id)];
+    } else {
+      _members =
+          _members.map((item) => item.id == member.id ? member : item).toList();
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyMembers,
+      jsonEncode(_members.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  Future<void> _ensureMemberUnique(
+    Member candidate, {
+    required bool online,
+    String? excludingMemberId,
+  }) async {
+    final localDuplicate = duplicateMemberField(
+      candidate,
+      _members,
+      excludingMemberId: excludingMemberId,
+    );
+    if (localDuplicate != null) {
+      throw DuplicateMemberException(localDuplicate);
+    }
+
+    final queuedActions = await _getPendingQueue();
+    final pendingMembers = <Member>[];
+    for (final action in queuedActions) {
+      if (action.table != 'members' ||
+          (action.action != 'create' &&
+              action.action != 'update' &&
+              action.action != 'update_with_photo_cleanup')) {
+        continue;
+      }
+      final rawMember = action.action == 'update_with_photo_cleanup'
+          ? action.payload['member']
+          : action.payload;
+      if (rawMember is Map<String, dynamic>) {
+        pendingMembers.add(Member.fromJson(rawMember));
+      }
+    }
+    final pendingDuplicate = duplicateMemberField(
+      candidate,
+      pendingMembers,
+      excludingMemberId: excludingMemberId,
+    );
+    if (pendingDuplicate != null) {
+      throw DuplicateMemberException(pendingDuplicate);
+    }
+
+    if (!online) return;
+
+    final remoteMembers = <Member>[];
+    const pageSize = 500;
+    for (var offset = 0;; offset += pageSize) {
+      final rows = await _supabase
+          .from(SupabaseConstants.tableMembers)
+          .select('id,gym_id,full_name,phone,deleted_at')
+          .eq('gym_id', candidate.gymId)
+          .isFilter('deleted_at', null)
+          .range(offset, offset + pageSize - 1);
+      remoteMembers.addAll(
+        (rows as List)
+            .map((row) => Member.fromJson(row as Map<String, dynamic>)),
+      );
+      if (rows.length < pageSize) break;
+    }
+    final remoteDuplicate = duplicateMemberField(
+      candidate,
+      remoteMembers,
+      excludingMemberId: excludingMemberId,
+    );
+    if (remoteDuplicate != null) {
+      throw DuplicateMemberException(remoteDuplicate);
+    }
+  }
+
+  DuplicateMemberException _memberUniqueViolation(PostgrestException error) {
+    return DuplicateMemberException(
+      duplicateMemberFieldForPostgrestException(error) ??
+          DuplicateMemberField.unknown,
+    );
+  }
+
+  DuplicateMemberField? _memberUniqueViolationFieldInText(String? error) {
+    if (error == null) return null;
+    final details = error.toLowerCase();
+    if (details.contains('members_unique_active_phone_per_gym') ||
+        details.contains('members_unique_phone_per_gym')) {
+      return DuplicateMemberField.phone;
+    }
+    if (details.contains('members_unique_active_name_per_gym') ||
+        details.contains('members_unique_name_per_gym')) {
+      return DuplicateMemberField.name;
+    }
+    return null;
   }
 
   Future<void> _queueMemberUpdate(

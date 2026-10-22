@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_eldeeb/auth/auth_provider.dart';
 import 'package:gym_eldeeb/auth/auth_repository.dart';
 import 'package:gym_eldeeb/auth/auth_state.dart';
+import 'package:gym_eldeeb/core/services/data_sync_service.dart';
 import 'package:gym_eldeeb/core/network/network_info.dart';
 import 'package:gym_eldeeb/core/theme/app_colors.dart';
 import 'package:gym_eldeeb/core/theme/app_theme_controller.dart';
@@ -17,9 +18,12 @@ import 'package:gym_eldeeb/data/models/payment.dart';
 import 'package:gym_eldeeb/data/models/user_profile.dart';
 import 'package:gym_eldeeb/data/local/local_storage_service.dart';
 import 'package:gym_eldeeb/core/theme/app_theme.dart';
+import 'package:gym_eldeeb/core/utils/member_identity.dart';
 import 'package:gym_eldeeb/features/dashboard/dashboard_screen.dart';
-import 'package:gym_eldeeb/core/services/data_sync_service.dart';
+import 'package:gym_eldeeb/widgets/member_photo.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' as http_testing;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 
@@ -99,12 +103,175 @@ class _OfflineNetworkInfo extends NetworkInfo {
   Future<bool> get isConnected async => false;
 }
 
+class _OnlineNetworkInfo extends NetworkInfo {
+  @override
+  Future<bool> get isConnected async => true;
+}
+
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('ar');
   });
 
-  group('Active membership overlap', () {
+  group('Member duplicate identity', () {
+    Member member({
+      String id = 'member-1',
+      String gymId = 'gym-1',
+      String fullName = 'أحمد محمد',
+      String? phone = '01012345678',
+      DateTime? deletedAt,
+    }) =>
+        Member(
+          id: id,
+          gymId: gymId,
+          fullName: fullName,
+          phone: phone,
+          joinDate: DateTime(2026, 10, 1),
+          createdAt: DateTime(2026, 10, 1),
+          updatedAt: DateTime(2026, 10, 1),
+          deletedAt: deletedAt,
+        );
+
+    test('normalizes name whitespace/case and phone formatting/digits', () {
+      expect(normalizeMemberName('  Jane   DOE  '), 'jane doe');
+      expect(
+        normalizeMemberPhone('٠١٠ ١٢٣٤-٥٦٧٨'),
+        normalizeMemberPhone('+20 (10) 1234 5678'),
+      );
+      expect(
+        normalizeMemberPhone('01012345678'),
+        isNot(normalizeMemberPhone('01012345679')),
+      );
+    });
+
+    test('detects duplicate name and phone, excluding current or other gyms',
+        () {
+      final existing = member();
+      expect(
+        duplicateMemberField(
+          member(id: 'new', fullName: '  أحمد   محمد ', phone: null),
+          [existing],
+        ),
+        DuplicateMemberField.name,
+      );
+      expect(
+        duplicateMemberField(
+          member(id: 'new', fullName: 'اسم مختلف', phone: '+20 10 1234 5678'),
+          [existing],
+        ),
+        DuplicateMemberField.phone,
+      );
+      expect(
+        duplicateMemberField(
+          member(id: 'member-1', fullName: 'اسم مختلف'),
+          [existing],
+          excludingMemberId: 'member-1',
+        ),
+        isNull,
+      );
+      expect(
+        duplicateMemberField(
+          member(id: 'new', gymId: 'gym-2'),
+          [existing],
+        ),
+        isNull,
+      );
+      expect(
+        duplicateMemberField(
+          member(id: 'new', fullName: 'أحمد محمد', phone: null),
+          [member(deletedAt: DateTime(2026, 10, 10))],
+        ),
+        isNull,
+      );
+    });
+
+    test('photo viewer sizing keeps landscape and portrait aspect ratios', () {
+      expect(
+        memberPhotoPreviewSize(const Size(400, 100), const Size(328, 620)),
+        const Size(328, 82),
+      );
+      expect(
+        memberPhotoPreviewSize(const Size(100, 400), const Size(328, 620)),
+        const Size(155, 620),
+      );
+    });
+
+    test('offline create blocks duplicates found in gym cache', () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        'cache_members_gym-1',
+        jsonEncode([member().toJson()]),
+      );
+      final supabase = SupabaseClient(
+        'https://example.supabase.co',
+        'test-key',
+      );
+      final service = DataSyncService(
+        supabase: supabase,
+        networkInfo: _OfflineNetworkInfo(),
+        initialGymId: 'gym-1',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await expectLater(
+        service.addMember(
+          fullName: 'اسم آخر',
+          phone: '+20 10 1234 5678',
+          joinDate: DateTime(2026, 10, 22),
+        ),
+        throwsA(
+          isA<DuplicateMemberException>().having(
+            (error) => error.field,
+            'field',
+            DuplicateMemberField.phone,
+          ),
+        ),
+      );
+      expect(service.members, hasLength(1));
+      service.dispose();
+    });
+
+    test('offline edit blocks duplicates without replacing the saved member',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final first = member(phone: '01011111111');
+      final second = member(
+        id: 'member-2',
+        fullName: 'اسم محفوظ آخر',
+        phone: '01022222222',
+      );
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        'cache_members_gym-1',
+        jsonEncode([first.toJson(), second.toJson()]),
+      );
+      final service = DataSyncService(
+        supabase: SupabaseClient('https://example.supabase.co', 'test-key'),
+        networkInfo: _OfflineNetworkInfo(),
+        initialGymId: 'gym-1',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await expectLater(
+        service.editMember(second.copyWith(fullName: '  أحمد   محمد ')),
+        throwsA(
+          isA<DuplicateMemberException>().having(
+            (error) => error.field,
+            'field',
+            DuplicateMemberField.name,
+          ),
+        ),
+      );
+      expect(
+        service.members.firstWhere((item) => item.id == second.id).fullName,
+        second.fullName,
+      );
+      service.dispose();
+    });
+  });
+
+  group('Membership and server-side uniqueness', () {
     Membership membership({
       String id = 'membership-1',
       String memberId = 'member-1',
@@ -177,6 +344,117 @@ void main() {
             .overlapsActivePeriod(proposed),
         isFalse,
       );
+    });
+
+    test('maps only the configured member unique indexes to field messages',
+        () {
+      const duplicateName = PostgrestException(
+        message:
+            'duplicate key value violates unique constraint "members_unique_active_name_per_gym"',
+        code: '23505',
+      );
+      const duplicatePhone = PostgrestException(
+        message: 'duplicate key value violates unique constraint',
+        details: 'Key violates members_unique_active_phone_per_gym',
+        code: '23505',
+      );
+      const unrelatedUniqueViolation = PostgrestException(
+        message:
+            'duplicate key value violates unique constraint "members_other_key"',
+        code: '23505',
+      );
+      const otherError = PostgrestException(
+        message: 'duplicate key value violates unique constraint',
+        details: 'members_unique_active_name_per_gym',
+        code: '23503',
+      );
+
+      expect(
+        DuplicateMemberException(
+          duplicateMemberFieldForPostgrestException(duplicateName)!,
+        ).toString(),
+        'اسم العضو مسجل بالفعل في هذا الجيم.',
+      );
+      expect(
+        DuplicateMemberException(
+          duplicateMemberFieldForPostgrestException(duplicatePhone)!,
+        ).toString(),
+        'رقم الموبايل مسجل بالفعل في هذا الجيم.',
+      );
+      expect(
+        duplicateMemberFieldForPostgrestException(unrelatedUniqueViolation),
+        isNull,
+      );
+      expect(duplicateMemberFieldForPostgrestException(otherError), isNull);
+    });
+
+    test('queued duplicate member sync failure stays pending and is reported',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final queuedAction = PendingAction(
+        id: 'member-create-1',
+        table: 'members',
+        action: 'create',
+        payload: {
+          'id': 'member-1',
+          'gym_id': 'gym-1',
+          'full_name': 'Duplicate name',
+          'join_date': '2026-10-01',
+        },
+        createdAt: DateTime.utc(2026, 10, 1),
+      );
+      await preferences.setString(
+        'pending_queue_gym-1',
+        jsonEncode([queuedAction.toJson()]),
+      );
+
+      var requestCount = 0;
+      final supabase = SupabaseClient(
+        'https://example.supabase.co',
+        'test-key',
+        httpClient: http_testing.MockClient((request) async {
+          requestCount++;
+          expect(request.url.path, '/rest/v1/members');
+          return http.Response(
+            jsonEncode({
+              'code': '23505',
+              'message':
+                  'duplicate key value violates unique constraint "members_unique_active_name_per_gym"',
+              'details': null,
+              'hint': null,
+            }),
+            409,
+            headers: {'content-type': 'application/json'},
+            request: request,
+          );
+        }),
+      );
+      supabase.auth.stopAutoRefresh();
+      final service = DataSyncService(
+        supabase: supabase,
+        networkInfo: _OnlineNetworkInfo(),
+        initialGymId: 'gym-1',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await service.syncAll();
+
+      final remainingActions = decodePendingActions(
+        preferences.getString('pending_queue_gym-1'),
+      );
+      expect(requestCount, greaterThan(0));
+      expect(
+        remainingActions.single.lastError,
+        contains('members_unique_active_name_per_gym'),
+      );
+      expect(service.syncStatus, SyncStatus.error);
+      expect(service.syncErrorMessage, 'اسم العضو مسجل بالفعل في هذا الجيم.');
+      expect(remainingActions, hasLength(1));
+      expect(remainingActions.single.id, queuedAction.id);
+      expect(remainingActions.single.retryCount, 5);
+      service.dispose();
+      await supabase.dispose();
     });
   });
 
@@ -1015,6 +1293,103 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('expiring membership cards expose chat and member details',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final today = DateTime.now();
+    final dateOnly = DateTime(today.year, today.month, today.day);
+    final member = Member(
+      id: 'member-expiring-actions',
+      gymId: 'gym-1',
+      fullName: 'عضو أزرار الانتهاء',
+      phone: '01012345678',
+      joinDate: dateOnly,
+      createdAt: dateOnly,
+      updatedAt: dateOnly,
+    );
+
+    await tester.pumpWidget(
+      _buildDashboardTestApp(
+        selectedTab: 7,
+        members: [member],
+        memberships: [
+          Membership(
+            id: 'membership-expiring-actions',
+            gymId: 'gym-1',
+            memberId: member.id,
+            startDate: dateOnly.subtract(const Duration(days: 30)),
+            endDate: dateOnly,
+            createdAt: dateOnly,
+            updatedAt: dateOnly,
+          ),
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byTooltip('مراسلة واتساب'), findsOneWidget);
+    expect(find.byTooltip('عرض تفاصيل العضو'), findsOneWidget);
+    await tester.tap(find.byTooltip('عرض تفاصيل العضو'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('رقم الهاتف المسجل'), findsOneWidget);
+    expect(find.text(member.fullName), findsNWidgets(2));
+
+    Navigator.of(tester.element(find.text('رقم الهاتف المسجل'))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('مراسلة واتساب'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('مراسلة ${member.fullName} عبر واتساب:'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('member photo preview is compact and preserves wide aspect',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final photo = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: Center(
+            child: MemberPhotoAvatar(
+              gymId: 'gym-1',
+              fullName: 'عضو الصورة',
+              photoBytes: photo,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(MemberPhotoAvatar));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+
+    final photoSurface = tester.getSize(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(ClipRRect),
+      ),
+    );
+    expect(photoSurface.width, lessThanOrEqualTo(328));
+    expect(photoSurface.height, lessThan(400));
+    expect(find.byTooltip('إغلاق معاينة الصورة'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('إغلاق معاينة الصورة'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(find.byType(Dialog), findsNothing);
+  });
+
   testWidgets('member and subscription screens show one page action each',
       (tester) async {
     tester.view.physicalSize = const Size(320, 640);
@@ -1049,6 +1424,8 @@ void main() {
 
     expect(find.text('الاسم بالكامل'), findsOneWidget);
     expect(find.text('مدرب تجريبي'), findsOneWidget);
+    expect(find.text('اسم الصالة (العربي)'), findsOneWidget);
+    expect(find.text('اسم الصالة (English)'), findsNothing);
     expect(find.text('معرف الحساب (User ID)'), findsNothing);
     expect(find.text(accountId), findsNothing);
     expect(tester.takeException(), isNull);
