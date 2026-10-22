@@ -1464,6 +1464,28 @@ class DataSyncService extends ChangeNotifier {
     return paymentToRecord;
   }
 
+  Future<bool> isPaymentPending(String paymentId) async {
+    final queue = await _getPendingQueue();
+    return queue.any((action) =>
+        action.table == 'payments' && action.payload['id'] == paymentId);
+  }
+
+  Future<bool> isMembershipPending(String membershipId) async {
+    final queue = await _getPendingQueue();
+    return queue.any((action) {
+      if (action.table == 'memberships' &&
+          action.payload['id'] == membershipId) {
+        return true;
+      }
+      if (action.table == 'membership_bundle') {
+        final membership = action.payload['membership'];
+        return membership is Map<String, dynamic> &&
+            membership['id'] == membershipId;
+      }
+      return false;
+    });
+  }
+
   Future<void> _queuePaymentWrite(Payment payment, {Object? error}) async {
     final queue = await _getPendingQueue();
     if (queue.any((action) =>

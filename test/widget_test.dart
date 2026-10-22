@@ -20,6 +20,7 @@ import 'package:gym_eldeeb/data/local/local_storage_service.dart';
 import 'package:gym_eldeeb/core/theme/app_theme.dart';
 import 'package:gym_eldeeb/core/utils/member_identity.dart';
 import 'package:gym_eldeeb/features/dashboard/dashboard_screen.dart';
+import 'package:gym_eldeeb/features/auth/login_screen.dart';
 import 'package:gym_eldeeb/widgets/member_photo.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:http/http.dart' as http;
@@ -33,16 +34,24 @@ Widget _buildDashboardTestApp({
   List<Member> members = const [],
   List<MembershipPlan> plans = const [],
   List<Membership> memberships = const [],
+  SyncStatus syncStatus = SyncStatus.synced,
+  String? syncErrorMessage,
+  bool syncSucceeds = true,
+  void Function(bool forceRetry)? onSync,
 }) {
   SharedPreferences.setMockInitialValues({});
   final supabase = SupabaseClient('https://example.supabase.co', 'test-key');
   supabase.auth.stopAutoRefresh();
   final dataService = _DashboardTestDataSyncService(
     supabase: supabase,
-    networkInfo: NetworkInfo(),
+    networkInfo: _OfflineNetworkInfo(),
     members: members,
     plans: plans,
     memberships: memberships,
+    syncStatus: syncStatus,
+    syncErrorMessage: syncErrorMessage,
+    syncSucceeds: syncSucceeds,
+    onSync: onSync,
   );
   final authNotifier = AuthNotifier(
     AuthRepository(supabase, LocalStorageService(), NetworkInfo()),
@@ -68,6 +77,10 @@ class _DashboardTestDataSyncService extends DataSyncService {
   final List<Member> _testMembers;
   final List<MembershipPlan> _testPlans;
   final List<Membership> _testMemberships;
+  SyncStatus _testSyncStatus;
+  String? _testSyncErrorMessage;
+  final bool _syncSucceeds;
+  final void Function(bool forceRetry)? _onSync;
 
   _DashboardTestDataSyncService({
     required super.supabase,
@@ -75,12 +88,35 @@ class _DashboardTestDataSyncService extends DataSyncService {
     required List<Member> members,
     required List<MembershipPlan> plans,
     required List<Membership> memberships,
+    required SyncStatus syncStatus,
+    required String? syncErrorMessage,
+    required bool syncSucceeds,
+    required void Function(bool forceRetry)? onSync,
   })  : _testMembers = members,
         _testPlans = plans,
-        _testMemberships = memberships;
+        _testMemberships = memberships,
+        _testSyncStatus = syncStatus,
+        _testSyncErrorMessage = syncErrorMessage,
+        _syncSucceeds = syncSucceeds,
+        _onSync = onSync;
 
   @override
-  SyncStatus get syncStatus => SyncStatus.synced;
+  SyncStatus get syncStatus => _testSyncStatus;
+
+  @override
+  String? get syncErrorMessage => _testSyncErrorMessage;
+
+  @override
+  Future<void> syncAll({bool forceRetry = false}) async {
+    _onSync?.call(forceRetry);
+    _testSyncStatus = SyncStatus.syncing;
+    notifyListeners();
+    await Future<void>.delayed(Duration.zero);
+    _testSyncStatus = _syncSucceeds ? SyncStatus.synced : SyncStatus.error;
+    _testSyncErrorMessage =
+        _syncSucceeds ? null : 'عملية مزامنة ما زالت معلقة.';
+    notifyListeners();
+  }
 
   @override
   List<Member> get members => _testMembers;
@@ -106,6 +142,15 @@ class _OfflineNetworkInfo extends NetworkInfo {
 class _OnlineNetworkInfo extends NetworkInfo {
   @override
   Future<bool> get isConnected async => true;
+}
+
+class _MutableNetworkInfo extends NetworkInfo {
+  bool connected;
+
+  _MutableNetworkInfo(this.connected);
+
+  @override
+  Future<bool> get isConnected async => connected;
 }
 
 void main() {
@@ -456,6 +501,93 @@ void main() {
       service.dispose();
       await supabase.dispose();
     });
+  });
+
+  test('successful forced retry clears sync warning and pending payment',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final payment = Payment(
+      id: 'payment-retry',
+      gymId: 'gym-1',
+      amount: 125,
+      paymentMethod: 'cash',
+      paidAt: DateTime.utc(2026, 10, 22),
+      createdAt: DateTime.utc(2026, 10, 22),
+      updatedAt: DateTime.utc(2026, 10, 22),
+    );
+    await preferences.setString(
+      'pending_queue_gym-1',
+      jsonEncode([
+        PendingAction(
+          id: 'payment-action',
+          table: 'payments',
+          action: 'create',
+          payload: payment.toJson(),
+          createdAt: payment.createdAt,
+        ).toJson(),
+      ]),
+    );
+
+    var paymentAttempts = 0;
+    final supabase = SupabaseClient(
+      'https://example.supabase.co',
+      'test-key',
+      httpClient: http_testing.MockClient((request) async {
+        if (request.url.path == '/rest/v1/payments' &&
+            request.method == 'POST') {
+          paymentAttempts++;
+          if (paymentAttempts == 1) {
+            return http.Response(
+              jsonEncode({
+                'code': '23505',
+                'message': 'duplicate payment id',
+                'details': null,
+                'hint': null,
+              }),
+              409,
+              headers: {'content-type': 'application/json'},
+              request: request,
+            );
+          }
+          return http.Response('', 204, request: request);
+        }
+        if (request.method == 'GET') {
+          final List<Map<String, dynamic>> rows =
+              request.url.path == '/rest/v1/payments' ? [payment.toJson()] : [];
+          return http.Response(
+            jsonEncode(rows),
+            200,
+            headers: {'content-type': 'application/json'},
+            request: request,
+          );
+        }
+        return http.Response('Unexpected request', 500, request: request);
+      }),
+    );
+    supabase.auth.stopAutoRefresh();
+    final network = _MutableNetworkInfo(false);
+    final service = DataSyncService(
+      supabase: supabase,
+      networkInfo: network,
+      initialGymId: 'gym-1',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    network.connected = true;
+
+    await service.syncAll();
+    expect(service.syncStatus, SyncStatus.error);
+    expect(await service.isPaymentPending(payment.id), isTrue);
+
+    await service.syncAll(forceRetry: true);
+
+    expect(paymentAttempts, 2);
+    expect(service.syncStatus, SyncStatus.synced);
+    expect(service.syncErrorMessage, isNull);
+    expect(await service.isPaymentPending(payment.id), isFalse);
+    expect(service.payments.single.id, payment.id);
+    service.dispose();
+    await supabase.dispose();
   });
 
   test('plan duration uses inclusive calendar-day end dates', () {
@@ -1144,6 +1276,195 @@ void main() {
     final searchField = tester.widget<TextField>(find.byType(TextField).last);
     expect(searchField.controller!.text, isEmpty);
     expect(find.text('عضو البحث بالهاتف • 01012345678'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pending sync warning stays visible until retry succeeds',
+      (tester) async {
+    var retryWasForced = false;
+    await tester.pumpWidget(
+      _buildDashboardTestApp(
+        selectedTab: 0,
+        syncStatus: SyncStatus.error,
+        syncErrorMessage: 'تعذر تأكيد التغيير من الخادم.',
+        syncSucceeds: false,
+        onSync: (forceRetry) => retryWasForced = forceRetry,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(
+        find.byKey(const ValueKey('dashboard-pending-sync-banner'),
+            skipOffstage: false),
+        findsOneWidget);
+    await tester.tap(find.byTooltip('تحديث البيانات'));
+    await tester.pumpAndSettle();
+    expect(retryWasForced, isTrue);
+    expect(
+        find.byKey(const ValueKey('dashboard-pending-sync-banner'),
+            skipOffstage: false),
+        findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      _buildDashboardTestApp(
+        selectedTab: 0,
+        syncStatus: SyncStatus.error,
+        syncErrorMessage: 'تعذر تأكيد التغيير من الخادم.',
+        syncSucceeds: true,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(
+        find.byKey(const ValueKey('dashboard-pending-sync-banner'),
+            skipOffstage: false),
+        findsOneWidget);
+    await tester.tap(find.byTooltip('تحديث البيانات'));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('dashboard-pending-sync-banner'),
+            skipOffstage: false),
+        findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('subscription edit status dropdown fits a narrow RTL dialog',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    final date = DateTime(2026, 10, 22);
+    final member = Member(
+      id: 'member-edit',
+      gymId: 'gym-1',
+      fullName: 'عضو تعديل',
+      joinDate: date,
+      createdAt: date,
+      updatedAt: date,
+    );
+
+    await tester.pumpWidget(
+      _buildDashboardTestApp(
+        selectedTab: 3,
+        members: [member],
+        memberships: [
+          Membership(
+            id: 'membership-edit',
+            gymId: 'gym-1',
+            memberId: member.id,
+            startDate: date,
+            endDate: date.add(const Duration(days: 30)),
+            status: 'active',
+            createdAt: date,
+            updatedAt: date,
+          ),
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.ensureVisible(find.byTooltip('تعديل بيانات الاشتراك'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('تعديل بيانات الاشتراك'));
+    await tester.pump(const Duration(milliseconds: 350));
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester
+        .ensureVisible(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pump();
+    final statusDropdown = find.descendant(
+      of: find.byType(DropdownButtonFormField<String>).last,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(tester.widget<DropdownButton<String>>(statusDropdown).isExpanded,
+        isTrue);
+    expect(find.text('ساري ومفعل (Active)'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(DropdownButtonFormField<String>).last).right,
+      lessThanOrEqualTo(320),
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    expect(find.text('منتهي (Expired)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('member picker dialog has an opaque app-themed background',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final date = DateTime(2026, 10, 22);
+    final member = Member(
+      id: 'member-picker',
+      gymId: 'gym-1',
+      fullName: 'medo',
+      joinDate: date,
+      createdAt: date,
+      updatedAt: date,
+    );
+    final plan = MembershipPlan(
+      id: 'plan-picker',
+      gymId: 'gym-1',
+      name: 'Monthly',
+      durationDays: 30,
+      price: 500,
+      createdAt: date,
+      updatedAt: date,
+    );
+
+    await tester.pumpWidget(
+      _buildDashboardTestApp(
+        selectedTab: 0,
+        members: [member],
+        plans: [plan],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('اشتراك جديد'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.byTooltip('بحث عن عضو'));
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final pickerDialog = tester.widget<Dialog>(find.byType(Dialog).last);
+    expect(pickerDialog.backgroundColor, AppColors.darkGoldPalette.surfaceCard);
+    expect(pickerDialog.backgroundColor!.a, 1);
+    expect(pickerDialog.surfaceTintColor, Colors.transparent);
+    expect(find.text('اختر العضو'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('login displays the updated Arabic headline on a narrow screen',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final supabase = SupabaseClient('https://example.supabase.co', 'test-key');
+    supabase.auth.stopAutoRefresh();
+    final authNotifier = AuthNotifier(
+      AuthRepository(supabase, LocalStorageService(), NetworkInfo()),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authNotifierProvider.overrideWith((ref) => authNotifier),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: const LoginScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('أهلاً بيك في جيم الديب'), findsOneWidget);
+    expect(find.text('سجل دخولك لمتابعة صالة الألعاب الرياضية والاشتراكات'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

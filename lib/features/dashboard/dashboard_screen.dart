@@ -251,7 +251,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             tooltip: 'تحديث البيانات',
             onPressed: syncService.syncStatus == SyncStatus.syncing
                 ? null
-                : () => syncService.syncAll(),
+                : () => syncService.syncAll(forceRetry: true),
           ),
         ],
       ),
@@ -415,6 +415,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
         children: [
           if (data.syncStatus == SyncStatus.error)
             Container(
+              key: const ValueKey('dashboard-pending-sync-banner'),
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -2818,15 +2819,22 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
         status: _status,
       );
 
-      await ref.read(dataSyncServiceProvider.notifier).editMembership(updated);
+      final service = ref.read(dataSyncServiceProvider.notifier);
+      await service.editMembership(updated);
+      final isPending = await service.isMembershipPending(updated.id);
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('تم تحديث بيانات الاشتراك بنجاح!',
+            content: Text(
+                isPending
+                    ? 'تم حفظ التعديل محلياً، ولم يؤكده الخادم بعد.'
+                    : 'تم تحديث بيانات الاشتراك بنجاح!',
                 textDirection: ui.TextDirection.rtl),
-            backgroundColor: context.appPalette.success),
+            backgroundColor: isPending
+                ? context.appPalette.warning
+                : context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
@@ -2856,12 +2864,19 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _planId,
                   decoration:
                       const InputDecoration(labelText: 'خطة / باقة الاشتراك'),
                   items: data.plans.map((p) {
                     return DropdownMenuItem(
-                        value: p.id, child: Text('${p.name} (${p.price} ج.م)'));
+                      value: p.id,
+                      child: Text(
+                        '${p.name} (${p.price} ج.م)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
                   }).toList(),
                   onChanged: (val) {
                     setState(() {
@@ -2920,16 +2935,34 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _status,
                   decoration: const InputDecoration(labelText: 'حالة الاشتراك'),
                   items: const [
                     DropdownMenuItem(
-                        value: 'active', child: Text('ساري ومفعل (Active)')),
+                      value: 'active',
+                      child: Text(
+                        'ساري ومفعل (Active)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     DropdownMenuItem(
-                        value: 'expired', child: Text('منتهي (Expired)')),
+                      value: 'expired',
+                      child: Text(
+                        'منتهي (Expired)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     DropdownMenuItem(
-                        value: 'cancelled',
-                        child: Text('ملغى / متوقف (Cancelled)')),
+                      value: 'cancelled',
+                      child: Text(
+                        'ملغى / متوقف (Cancelled)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                   onChanged: (val) => setState(() => _status = val ?? 'active'),
                 ),
@@ -3452,15 +3485,22 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
 
-      await ref.read(dataSyncServiceProvider.notifier).editPayment(updated);
+      final service = ref.read(dataSyncServiceProvider.notifier);
+      await service.editPayment(updated);
+      final isPending = await service.isPaymentPending(updated.id);
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('تم تحديث الدفعة المالية بنجاح!',
+            content: Text(
+                isPending
+                    ? 'تم حفظ التعديل محلياً، ولم يؤكده الخادم بعد.'
+                    : 'تم تحديث الدفعة المالية بنجاح!',
                 textDirection: ui.TextDirection.rtl),
-            backgroundColor: context.appPalette.success),
+            backgroundColor: isPending
+                ? context.appPalette.warning
+                : context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;
@@ -3687,6 +3727,8 @@ class _MemberSearchDialogState extends State<_MemberSearchDialog> {
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: Dialog(
+        backgroundColor: context.appPalette.surfaceCard,
+        surfaceTintColor: Colors.transparent,
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: 420,
@@ -3840,23 +3882,30 @@ class _RecordPaymentDialogState extends ConsumerState<_RecordPaymentDialog> {
           _descriptionCtrl.text.trim(),
       ].join(' • ');
 
-      await ref.read(dataSyncServiceProvider.notifier).recordPayment(
-            paymentId: _paymentId,
-            membershipId: linkedMembershipId,
-            amount: double.parse(_amountCtrl.text),
-            paymentMethod: _method,
-            paidAt: _paidAt,
-            notes: noteText.isEmpty ? null : noteText,
-          );
+      final service = ref.read(dataSyncServiceProvider.notifier);
+      await service.recordPayment(
+        paymentId: _paymentId,
+        membershipId: linkedMembershipId,
+        amount: double.parse(_amountCtrl.text),
+        paymentMethod: _method,
+        paidAt: _paidAt,
+        notes: noteText.isEmpty ? null : noteText,
+      );
+      final isPending = await service.isPaymentPending(_paymentId);
 
       if (!mounted) return;
       Navigator.of(context).pop();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: const Text('تم تسجيل الدفعة بنجاح!',
+            content: Text(
+                isPending
+                    ? 'تم حفظ الدفعة محلياً، ولم يؤكدها الخادم بعد.'
+                    : 'تم تسجيل الدفعة بنجاح!',
                 textDirection: ui.TextDirection.rtl),
-            backgroundColor: context.appPalette.success),
+            backgroundColor: isPending
+                ? context.appPalette.warning
+                : context.appPalette.success),
       );
     } catch (e) {
       if (!mounted) return;

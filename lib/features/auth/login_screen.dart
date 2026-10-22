@@ -89,7 +89,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const BrandLogo(size: 72),
                   const SizedBox(height: 32),
                   Text(
-                    'تسجيل الدخول للمدربين والمالكين',
+                    'أهلاً بيك في جيم الديب',
+                    textDirection: TextDirection.rtl,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: context.appPalette.textPrimary,
@@ -198,8 +199,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 20),
 
                   // Go to Register
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         'ليس لديك حساب بعد؟',
