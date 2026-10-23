@@ -1132,7 +1132,21 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
       ? data.plans.where((plan) => plan.id == activePlanId).firstOrNull?.name ??
           'الاشتراك الحالي'
       : 'الاشتراك الشهري';
-  final dueAmount = messageMembership?.price ?? 0.0;
+  final membershipPayments = messageMembership == null
+      ? <Payment>[]
+      : data.payments
+          .where((payment) => payment.membershipId == messageMembership.id)
+          .toList()
+        ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
+  final paidAmount = membershipPayments.fold<double>(
+    0.0,
+    (total, payment) => total + payment.amount,
+  );
+  final dueAmount = ((messageMembership?.price ?? 0.0) - paidAmount)
+      .clamp(0.0, double.infinity)
+      .toDouble();
+  final lastPaymentAmount =
+      membershipPayments.isNotEmpty ? membershipPayments.first.amount : 0.0;
   final startDate = messageMembership != null
       ? RtlSupport.formatDate(messageMembership.startDate)
       : null;
@@ -1235,7 +1249,7 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
                   phone: member.phone!,
                   message: WhatsappService.getPaymentConfirmation(
                     member.fullName,
-                    dueAmount,
+                    lastPaymentAmount,
                     startDateStr: startDate,
                     endDateStr: messageMembership == null ? null : endDate,
                   ),
