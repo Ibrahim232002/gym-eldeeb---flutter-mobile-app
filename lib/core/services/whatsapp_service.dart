@@ -42,20 +42,92 @@ class WhatsappService {
     return clean;
   }
 
-  /// Format payment reminder message in Arabic
-  static String getPaymentReminder(String memberName, double amount) {
-    return 'السلام عليكم يا كابتن $memberName، نود تذكيرك بوجود دفعة مستحقة لاشتراكك في جيم الديب بقيمة $amount ج.م. شكراً لك! 💪';
+  /// Format a friendly Arabic welcome/general contact message.
+  static String getGeneralContact(
+    String memberName, {
+    String? startDateStr,
+    String? endDateStr,
+    String? planName,
+  }) {
+    final membershipDetails = (startDateStr != null && endDateStr != null)
+        ? '\n📋 باقة الاشتراك: ${planName ?? 'الاشتراك الحالي'}'
+            '\n📅 بداية الاشتراك: $startDateStr'
+            '\n📅 نهاية الاشتراك: $endDateStr'
+        : '';
+    return 'السلام عليكم يا كابتن $memberName 👋🦁\n\n'
+        'أهلاً بيك في جيم الديب! نتمنى لك القوة والنشاط وتحقيق أهدافك الرياضية. 💪'
+        '$membershipDetails\n\n'
+        'يسعدنا وجودك معانا، ومستنيينك دايمًا في التمرين! 🏋️‍♂️';
   }
 
-  /// Format membership expiring reminder message in Arabic
+  /// Format an outstanding-payment reminder in Arabic.
+  static String getPaymentReminder(
+    String memberName,
+    double amount, {
+    String? startDateStr,
+    String? endDateStr,
+  }) {
+    final dates = (startDateStr != null && endDateStr != null)
+        ? '\n📅 فترة الاشتراك: من $startDateStr إلى $endDateStr'
+        : '';
+    return 'السلام عليكم يا كابتن $memberName 👋\n\n'
+        'بنحب نفكّرك إن فيه مبلغ مستحق لاشتراكك في جيم الديب بقيمة '
+        '${amount.toStringAsFixed(2)} ج.م.$dates\n\n'
+        'لو تم السداد بالفعل، نرجو تجاهل الرسالة دي. شكرًا لثقتك في جيم الديب! 💪🦁';
+  }
+
+  /// Reminder for a membership that will expire soon.
   static String getExpiryReminder(
-      String memberName, String planName, String endDateStr) {
-    return 'السلام عليكم يا كابتن $memberName، نود تذكيرك بأن اشتراكك ($planName) في جيم الديب ينتهي قريباً بتاريخ $endDateStr. يسعدنا استمرار تمرينك معنا! 🏋️‍♂️';
+    String memberName,
+    String planName,
+    String endDateStr, {
+    String? startDateStr,
+  }) {
+    final startDate = startDateStr == null
+        ? ''
+        : '\n📅 بداية الاشتراك: $startDateStr';
+    return 'السلام عليكم يا كابتن $memberName 👋🏋️‍♂️\n\n'
+        'بنحب نفكّرك إن اشتراكك في جيم الديب ($planName) هينتهي قريبًا '
+        'يوم $endDateStr.$startDate\n'
+        '📅 تاريخ الانتهاء: $endDateStr\n\n'
+        'جدّد اشتراكك في الوقت المناسب عشان تكمّل تمرينك من غير انقطاع. '
+        'مستنيينك دايمًا! 💪🦁';
   }
 
-  /// Format general contact message in Arabic
-  static String getGeneralContact(String memberName) {
-    return 'السلام عليكم يا كابتن $memberName، نأمل أن تكون بخير وبكامل النشاط! نتشرف بالتواصل معك من جيم الديب. 🦁';
+  /// Reminder for an expired membership with an outstanding balance.
+  static String getExpiredReminder(
+    String memberName,
+    double amount, {
+    String? startDateStr,
+    String? endDateStr,
+  }) {
+    final dates = (startDateStr != null && endDateStr != null)
+        ? '\n📅 فترة الاشتراك: من $startDateStr إلى $endDateStr'
+        : '';
+    final balance = amount > 0
+        ? '\n💳 المبلغ المستحق: ${amount.toStringAsFixed(2)} ج.م'
+        : '';
+    return 'السلام عليكم يا كابتن $memberName 👋\n\n'
+        'بنحب نفكّرك إن اشتراكك في جيم الديب انتهى بتاريخ '
+        '${endDateStr ?? 'غير محدد'}.$dates$balance\n\n'
+        'يسعدنا تجديد اشتراكك وعودتك للتمرين معانا. ولو تم السداد أو التجديد بالفعل، '
+        'نرجو تجاهل الرسالة دي. 💪🦁';
+  }
+
+  /// Confirmation message to send after recording a payment.
+  static String getPaymentConfirmation(
+    String memberName,
+    double amount, {
+    String? startDateStr,
+    String? endDateStr,
+  }) {
+    final dates = (startDateStr != null && endDateStr != null)
+        ? '\n📅 فترة الاشتراك: من $startDateStr إلى $endDateStr'
+        : '';
+    return 'السلام عليكم يا كابتن $memberName 👋\n\n'
+        'تم استلام دفعتك بنجاح بقيمة ${amount.toStringAsFixed(2)} ج.م، '
+        'شكرًا لالتزامك وثقتك في جيم الديب!$dates\n\n'
+        'نتمنالك تمرينًا موفقًا ونتائج ممتازة. مستنيينك دايمًا! 💪🦁';
   }
 
   /// Launch WhatsApp click-to-chat
