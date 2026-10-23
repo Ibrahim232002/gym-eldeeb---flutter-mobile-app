@@ -414,17 +414,20 @@ class _DashboardOverviewTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
+    final members = data.members;
+    final memberships = data.memberships;
+    final payments = data.payments;
 
-    final totalMembers = data.members.length;
-    final activeMembers = data.members.where((m) => m.isActive).length;
+    final totalMembers = members.length;
+    final activeMembers = members.where((m) => m.isActive).length;
     final inactiveMembers = totalMembers - activeMembers;
 
     final now = DateTime.now();
     final expiringSoonMemberships =
-        expiringMembershipsWithinDays(data.memberships, now);
+        expiringMembershipsWithinDays(memberships, now);
 
     final today = DateTime(now.year, now.month, now.day);
-    final todayPayments = data.payments.where((p) {
+    final todayPayments = payments.where((p) {
       final payDate = DateTime(p.paidAt.year, p.paidAt.month, p.paidAt.day);
       return payDate.isAtSameMomentAs(today);
     }).toList();
@@ -922,7 +925,7 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
 
         Expanded(
           child: filteredMembers.isEmpty
-              ? data.syncStatus == SyncStatus.syncing && data.members.isEmpty
+              ? data.syncStatus == SyncStatus.syncing && members.isEmpty
                   ? Center(
                       child: CircularProgressIndicator(
                           color: context.appPalette.primary),
