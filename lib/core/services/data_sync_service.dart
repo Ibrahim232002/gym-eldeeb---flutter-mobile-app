@@ -677,59 +677,68 @@ class DataSyncService extends ChangeNotifier {
   Future<void> _fetchRemoteData(String gymId) async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Fetch members
-    final membersResponse = await _supabase
-        .from(SupabaseConstants.tableMembers)
-        .select()
-        .eq('gym_id', gymId)
-        .order('full_name', ascending: true);
-    _members = (membersResponse as List)
+    // These four reads are independent. Run them together to avoid making the
+    // total refresh time the sum of four network round trips.
+    final responses = await Future.wait<dynamic>([
+      _supabase
+          .from(SupabaseConstants.tableMembers)
+          .select()
+          .eq('gym_id', gymId)
+          .order('full_name', ascending: true),
+      _supabase
+          .from(SupabaseConstants.tableMembershipPlans)
+          .select()
+          .eq('gym_id', gymId)
+          .order('name', ascending: true),
+      _supabase
+          .from(SupabaseConstants.tableMemberships)
+          .select()
+          .eq('gym_id', gymId)
+          .order('start_date', ascending: false),
+      _supabase
+          .from(SupabaseConstants.tablePayments)
+          .select()
+          .eq('gym_id', gymId)
+          .order('paid_at', ascending: false),
+    ]);
+
+    // Parse the full snapshot before replacing any in-memory cache. If one
+    // request fails, the existing local snapshot remains intact.
+    final members = (responses[0] as List)
         .map((json) => Member.fromJson(json as Map<String, dynamic>))
         .toList();
-    await prefs.setString(
-        _keyMembers, jsonEncode(_members.map((m) => m.toJson()).toList()));
-
-    // Fetch plans
-    final plansResponse = await _supabase
-        .from(SupabaseConstants.tableMembershipPlans)
-        .select()
-        .eq('gym_id', gymId)
-        .order('name', ascending: true);
-    _plans = (plansResponse as List)
+    final plans = (responses[1] as List)
         .map((json) => MembershipPlan.fromJson(json as Map<String, dynamic>))
         .toList();
-    await prefs.setString(
-        _keyPlans, jsonEncode(_plans.map((p) => p.toJson()).toList()));
-
-    // Fetch memberships
-    final membershipsResponse = await _supabase
-        .from(SupabaseConstants.tableMemberships)
-        .select()
-        .eq('gym_id', gymId)
-        .order('start_date', ascending: false);
-    _memberships = (membershipsResponse as List)
+    final memberships = (responses[2] as List)
         .map((json) => Membership.fromJson(json as Map<String, dynamic>))
         .toList();
-    await prefs.setString(_keyMemberships,
-        jsonEncode(_memberships.map((m) => m.toJson()).toList()));
-
-    // Fetch payments
-    final paymentsResponse = await _supabase
-        .from(SupabaseConstants.tablePayments)
-        .select()
-        .eq('gym_id', gymId)
-        .order('paid_at', ascending: false);
-    _payments = (paymentsResponse as List)
+    final payments = (responses[3] as List)
         .map((json) => Payment.fromJson(json as Map<String, dynamic>))
         .toList();
-    await prefs.setString(
-        _keyPayments, jsonEncode(_payments.map((p) => p.toJson()).toList()));
+
+    // Persist the complete fetched snapshot before publishing it to consumers.
+    await Future.wait<bool>([
+      prefs.setString(
+          _keyMembers, jsonEncode(members.map((m) => m.toJson()).toList())),
+      prefs.setString(
+          _keyPlans, jsonEncode(plans.map((p) => p.toJson()).toList())),
+      prefs.setString(_keyMemberships,
+          jsonEncode(memberships.map((m) => m.toJson()).toList())),
+      prefs.setString(
+          _keyPayments, jsonEncode(payments.map((p) => p.toJson()).toList())),
+    ]);
+
+    _members = members;
+    _plans = plans;
+    _memberships = memberships;
+    _payments = payments;
 
     // Resolve actor names for the audit labels shown in the app.
     final actorIds = <String>{
-      ..._members.map((item) => item.createdBy).whereType<String>(),
-      ..._memberships.map((item) => item.createdBy).whereType<String>(),
-      ..._payments.map((item) => item.recordedBy).whereType<String>(),
+      ...members.map((item) => item.createdBy).whereType<String>(),
+      ...memberships.map((item) => item.createdBy).whereType<String>(),
+      ...payments.map((item) => item.recordedBy).whereType<String>(),
     }.toList();
     if (actorIds.isNotEmpty) {
       try {
@@ -740,8 +749,9 @@ class DataSyncService extends ChangeNotifier {
         for (final row in profiles as List) {
           final id = row['id'] as String?;
           final name = row['full_name'] as String?;
-          if (id != null && name != null && name.trim().isNotEmpty)
+          if (id != null && name != null && name.trim().isNotEmpty) {
             _creatorNames[id] = name.trim();
+          }
         }
       } catch (_) {
         // Keep the UI usable if profile-name lookup is unavailable.
