@@ -1118,19 +1118,27 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
   }
 
   final data = ref.read(dataSyncServiceProvider);
-  final activeMembership = data.memberships
-      .where((membership) =>
-          membership.memberId == member.id && !membership.isExpired)
+  final memberMemberships = data.memberships
+      .where((membership) => membership.memberId == member.id)
+      .toList()
+    ..sort((a, b) => b.endDate.compareTo(a.endDate));
+  final activeMembership = memberMemberships
+      .where((membership) => !membership.isExpired)
       .firstOrNull;
-  final activePlanId = activeMembership?.planId;
+  final latestMembership = memberMemberships.firstOrNull;
+  final messageMembership = activeMembership ?? latestMembership;
+  final activePlanId = messageMembership?.planId;
   final planName = activePlanId != null
       ? data.plans.where((plan) => plan.id == activePlanId).firstOrNull?.name ??
           'الاشتراك الحالي'
       : 'الاشتراك الشهري';
-  final dueAmount = activeMembership?.price ?? 0.0;
-  final endDate = activeMembership != null
-      ? RtlSupport.formatDate(activeMembership.endDate)
-      : 'نهاية الشهر';
+  final dueAmount = messageMembership?.price ?? 0.0;
+  final startDate = messageMembership != null
+      ? RtlSupport.formatDate(messageMembership.startDate)
+      : null;
+  final endDate = messageMembership != null
+      ? RtlSupport.formatDate(messageMembership.endDate)
+      : 'غير محدد';
 
   showModalBottomSheet<void>(
     context: context,
@@ -1156,7 +1164,12 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
                 Navigator.pop(sheetContext);
                 WhatsappService.launchWhatsApp(
                   phone: member.phone!,
-                  message: WhatsappService.getGeneralContact(member.fullName),
+                  message: WhatsappService.getGeneralContact(
+                    member.fullName,
+                    startDateStr: startDate,
+                    endDateStr: messageMembership == null ? null : endDate,
+                    planName: planName,
+                  ),
                 );
               },
             ),
@@ -1172,6 +1185,8 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
                   message: WhatsappService.getPaymentReminder(
                     member.fullName,
                     dueAmount,
+                    startDateStr: startDate,
+                    endDateStr: messageMembership == null ? null : endDate,
                   ),
                 );
               },
@@ -1188,6 +1203,41 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
                     member.fullName,
                     planName,
                     endDate,
+                    startDateStr: startDate,
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.event_busy_rounded,
+                  color: context.appPalette.error),
+              title: const Text('تذكير بانتهاء الاشتراك وعدم التجديد'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                WhatsappService.launchWhatsApp(
+                  phone: member.phone!,
+                  message: WhatsappService.getExpiredReminder(
+                    member.fullName,
+                    dueAmount,
+                    startDateStr: startDate,
+                    endDateStr: messageMembership == null ? null : endDate,
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.verified_rounded,
+                  color: context.appPalette.success),
+              title: const Text('تأكيد استلام الدفع'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                WhatsappService.launchWhatsApp(
+                  phone: member.phone!,
+                  message: WhatsappService.getPaymentConfirmation(
+                    member.fullName,
+                    dueAmount,
+                    startDateStr: startDate,
+                    endDateStr: messageMembership == null ? null : endDate,
                   ),
                 );
               },
