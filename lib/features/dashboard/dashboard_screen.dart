@@ -116,11 +116,25 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final Set<int> _visitedTabs = <int>{0};
 
   @override
   Widget build(BuildContext context) {
     final currentTab = ref.watch(selectedTabProvider);
-    final syncService = ref.watch(dataSyncServiceProvider);
+    // Keep navigation state in sync even when a tab is selected from a dashboard card.
+    ref.listen<int>(selectedTabProvider, (previous, next) {
+      if (!_visitedTabs.contains(next)) {
+        setState(() => _visitedTabs.add(next));
+      }
+    });
+
+    // Watch only the sync status here. Watching the whole ChangeNotifier causes the
+    // dashboard shell to rebuild for every data mutation.
+    final syncService = ref.read(dataSyncServiceProvider);
+    final syncStatus = ref.watch(
+      dataSyncServiceProvider.select((service) => service.syncStatus),
+    );
+    final isOffline = syncStatus == SyncStatus.offline;
     final profile = ref.watch(currentProfileProvider);
 
     final drawerWidget = Drawer(
@@ -209,7 +223,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         actions: [
-          if (syncService.isOffline)
+          if (isOffline)
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 8.0),
               child: Row(
@@ -226,7 +240,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
           IconButton(
-            icon: syncService.syncStatus == SyncStatus.syncing
+            icon: syncStatus == SyncStatus.syncing
                 ? SizedBox(
                     width: 18,
                     height: 18,
@@ -237,7 +251,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   )
                 : const Icon(Icons.sync_rounded),
             tooltip: 'تحديث البيانات',
-            onPressed: syncService.syncStatus == SyncStatus.syncing
+            onPressed: syncStatus == SyncStatus.syncing
                 ? null
                 : () => syncService.syncAll(forceRetry: true),
           ),
@@ -317,6 +331,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildBody(int tab) {
+    // Build tabs on first visit, then keep them mounted so returning to a tab
+    // preserves scroll position, search/filter state, and other local UI state.
+    // Unvisited tabs stay as placeholders to avoid loading every screen up front.
+    const validTabs = <int>{0, 1, 2, 3, 4, 6, 7};
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final index in validTabs)
+          if (_visitedTabs.contains(index))
+            Offstage(
+              offstage: tab != index,
+              child: TickerMode(
+                enabled: tab == index,
+                child: _tabForIndex(index),
+              ),
+            ),
+      ],
+    );
+  }
+
+  Widget _tabForIndex(int tab) {
     switch (tab) {
       case 0:
         return const _DashboardOverviewTab();
