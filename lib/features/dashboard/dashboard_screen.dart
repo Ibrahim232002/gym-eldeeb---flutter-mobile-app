@@ -866,7 +866,11 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
     final filterType = ref.watch(memberFilterProvider);
     final searchQuery = _searchQuery.trim().toLowerCase();
 
-    final filteredMembers = data.members.where((m) {
+    // Read filtered service getters once per build; they return new lists.
+    final members = data.members;
+    final activeCount = members.where((m) => m.isActive).length;
+    final inactiveCount = members.length - activeCount;
+    final filteredMembers = members.where((m) {
       final matchesSearch = memberMatchesSearch(m, searchQuery);
 
       if (filterType == 'active') {
@@ -905,11 +909,11 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildFilterChip('all', 'الكل (${data.members.length})'),
+                  _buildFilterChip('all', 'الكل (${members.length})'),
                   _buildFilterChip('active',
-                      'نشط (${data.members.where((m) => m.isActive).length})'),
+                      'نشط (${activeCount})'),
                   _buildFilterChip('inactive',
-                      'غير نشط (${data.members.where((m) => !m.isActive).length})'),
+                      'غير نشط (${inactiveCount})'),
                 ],
               ),
             ],
@@ -2426,23 +2430,24 @@ class _MembershipsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
+    final memberships = data.memberships;
+    final membersById = {for (final member in data.members) member.id: member};
+    final plansById = {for (final plan in data.plans) plan.id: plan};
 
     return Column(
       children: [
         Expanded(
-          child: data.memberships.isEmpty
+          child: memberships.isEmpty
               ? Center(
                   child: Text('لا توجد اشتراكات مفعلة حالياً.',
                       style:
                           TextStyle(color: context.appPalette.textSecondary)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: data.memberships.length,
+                  itemCount: memberships.length,
                   itemBuilder: (context, index) {
-                    final membership = data.memberships[index];
-                    final member = data.members
-                            .where((m) => m.id == membership.memberId)
-                            .firstOrNull ??
+                    final membership = memberships[index];
+                    final member = membersById[membership.memberId] ??
                         Member(
                             id: '',
                             gymId: '',
@@ -2450,9 +2455,7 @@ class _MembershipsTab extends ConsumerWidget {
                             joinDate: DateTime.now(),
                             createdAt: DateTime.now(),
                             updatedAt: DateTime.now());
-                    final plan = data.plans
-                            .where((p) => p.id == membership.planId)
-                            .firstOrNull ??
+                    final plan = plansById[membership.planId] ??
                         MembershipPlan(
                             id: '',
                             gymId: '',
@@ -2624,6 +2627,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
+    final membersById = {for (final member in data.members) member.id: member};
     final today = DateTime.now();
     final memberships = expiringMembershipsWithinDays(data.memberships, today)
       ..sort((a, b) => a.endDate.compareTo(b.endDate));
@@ -2694,9 +2698,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
             itemCount: memberships.length,
             itemBuilder: (context, index) {
               final membership = memberships[index];
-              final member = data.members
-                  .where((item) => item.id == membership.memberId)
-                  .firstOrNull;
+              final member = membersById[membership.memberId];
               final remainingDays = membership.daysRemainingAt(today);
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
