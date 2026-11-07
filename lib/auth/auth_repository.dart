@@ -75,7 +75,7 @@ class AuthRepository {
   ///
   /// SECURITY:
   /// - Client NEVER selects or modifies `role` or `gym_id`.
-  /// - Only `full_name` is passed in user_metadata and optional profile placeholder.
+  /// - Only `full_name` is passed in user_metadata; no database profile is created here.
   /// - User remains unassociated with any gym until redeeming an invite code via the Edge Function.
   Future<void> signUp({
     required String email,
@@ -93,7 +93,6 @@ class AuthRepository {
         data: {'full_name': cleanName},
       );
 
-      final user = response.user;
       // Do not create a placeholder row in public.profiles here.
       // The secure join-gym flow calls claim_gym_invite, which creates the
       // profile and assigns gym_id/role atomically after validating the invite.
