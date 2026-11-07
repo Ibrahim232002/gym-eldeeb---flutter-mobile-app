@@ -635,16 +635,17 @@ class DataSyncService extends ChangeNotifier {
     var table = '';
     if (action.table == 'members') {
       table = SupabaseConstants.tableMembers;
-    } else if (action.table == 'plans')
+    } else if (action.table == 'plans') {
       table = SupabaseConstants.tableMembershipPlans;
-    else if (action.table == 'memberships')
+    } else if (action.table == 'memberships') {
       table = SupabaseConstants.tableMemberships;
-    else if (action.table == 'payments')
+    } else if (action.table == 'payments') {
       table = SupabaseConstants.tablePayments;
-    else if (action.table == 'gyms')
+    } else if (action.table == 'gyms') {
       table = SupabaseConstants.tableGyms;
-    else if (action.table == 'profiles')
+    } else if (action.table == 'profiles') {
       table = SupabaseConstants.tableProfiles;
+    }
 
     if (table.isEmpty) {
       throw StateError('Unsupported pending sync table: ${action.table}');
