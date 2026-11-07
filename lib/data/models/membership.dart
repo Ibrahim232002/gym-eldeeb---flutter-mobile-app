@@ -162,9 +162,44 @@ List<Membership> expiringMembershipsWithinDays(
   Iterable<Membership> memberships,
   DateTime date, {
   int days = 7,
-}) =>
-    memberships
-        .where(
-            (membership) => membership.isExpiringWithinDays(date, days: days))
-        .toList();
+}) {
+  final allMemberships = memberships.toList(growable: false);
+
+  return allMemberships.where((membership) {
+    if (!membership.isExpiringWithinDays(date, days: days)) {
+      return false;
+    }
+
+    final membershipEnd = DateTime.utc(
+      membership.endDate.year,
+      membership.endDate.month,
+      membership.endDate.day,
+    );
+
+    // A paid renewal that starts the day after this membership ends means
+    // the member has already renewed. Keep both records for history, but
+    // don't show the old record as an outstanding renewal reminder.
+    final hasImmediateRenewal = allMemberships.any((successor) {
+      if (successor.id == membership.id ||
+          successor.gymId != membership.gymId ||
+          successor.memberId != membership.memberId ||
+          successor.status != 'active' ||
+          successor.deletedAt != null) {
+        return false;
+      }
+
+      final successorStart = DateTime.utc(
+        successor.startDate.year,
+        successor.startDate.month,
+        successor.startDate.day,
+      );
+      final daysBetween = successorStart.difference(membershipEnd).inDays;
+
+      // Membership end dates are inclusive, so the next day is contiguous.
+      return daysBetween == 1;
+    });
+
+    return !hasImmediateRenewal;
+  }).toList();
+}
 //
