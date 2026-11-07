@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/top_snackbar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/auth_provider.dart';
@@ -52,7 +53,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     if (success) {
       // Newly registered users have no gym and proceed directly to Join Gym
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: Text(
             'تم إنشاء الحساب بنجاح! أدخل رمز الدعوة للانضمام لصالة الجيم.',
@@ -69,7 +70,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           'فشل إنشاء الحساب، يرجى المحاولة لاحقاً';
       setState(() => _localErrorMessage = error);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: Text(
             error,
