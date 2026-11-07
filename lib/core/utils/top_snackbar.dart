@@ -148,7 +148,7 @@ class _TopSnackBarOverlayState extends State<_TopSnackBarOverlay>
                             ),
                           ),
                         ),
-                      if (widget.snackBar.showCloseIcon)
+                      if (widget.snackBar.showCloseIcon == true)
                         IconButton(
                           tooltip: MaterialLocalizations.of(context)
                               .closeButtonTooltip,
