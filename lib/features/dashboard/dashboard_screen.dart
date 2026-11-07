@@ -3490,9 +3490,22 @@ class _PaymentsTab extends ConsumerWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'مدفوعات شهر $monthLabel',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'مدفوعات شهر $monthLabel',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'عرض الشهر الحالي فقط؛ السجلات السابقة محفوظة.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.appPalette.textMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Text(
