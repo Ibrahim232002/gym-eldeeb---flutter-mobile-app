@@ -12,7 +12,11 @@ void showTopSnackBar(BuildContext context, SnackBar snackBar) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
 
-  _activeTopSnackBarEntry?.remove();
+  final previousEntry = _activeTopSnackBarEntry;
+  if (previousEntry?.mounted == true) {
+    previousEntry!.remove();
+  }
+  _activeTopSnackBarEntry = null;
 
   late final OverlayEntry entry;
   entry = OverlayEntry(
