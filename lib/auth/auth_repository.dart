@@ -94,20 +94,11 @@ class AuthRepository {
       );
 
       final user = response.user;
-      if (user != null) {
-        // Ensure initial profile record contains full_name without modifying role or gym_id
-        final existing = await _fetchRemoteProfile(user.id);
-        if (existing == null) {
-          try {
-            await _supabase.from(SupabaseConstants.tableProfiles).upsert({
-              'id': user.id,
-              'full_name': cleanName,
-            });
-          } catch (_) {
-            // Profile may be created by database trigger, continue safely
-          }
-        }
-      }
+      // Do not create a placeholder row in public.profiles here.
+      // The secure join-gym flow calls claim_gym_invite, which creates the
+      // profile and assigns gym_id/role atomically after validating the invite.
+      // Keeping profiles absent until invite redemption also prevents
+      // claim_gym_invite from rejecting this newly registered user.
     } on AuthException catch (e) {
       throw Exception(_mapAuthExceptionToArabic(e));
     } catch (e) {
