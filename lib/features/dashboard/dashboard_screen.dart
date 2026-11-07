@@ -664,7 +664,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
               const Expanded(
                 child: Text(
                   'آخر الأعضاء المسجلين',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
               TextButton(
@@ -729,7 +729,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
               Expanded(
                 child: Text(
                   'مدفوعات شهر $monthLabel',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
               TextButton(
