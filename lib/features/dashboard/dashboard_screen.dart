@@ -11,6 +11,7 @@ import '../../core/theme/app_theme_controller.dart';
 import '../../core/utils/rtl_support.dart';
 import '../../core/services/data_sync_service.dart';
 import '../../core/services/whatsapp_service.dart';
+import '../../core/utils/top_snackbar.dart';
 
 import '../../data/models/member.dart';
 import '../../data/models/membership_plan.dart';
@@ -41,7 +42,7 @@ Future<void> _saveTheme(
     await ref.read(appThemeProvider.notifier).setTheme(variant);
   } catch (error) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    showTopSnackBar(context, 
       SnackBar(
         content: Text('تعذر حفظ المظهر: $error'),
         backgroundColor: context.appPalette.error,
@@ -426,13 +427,14 @@ class _DashboardOverviewTab extends ConsumerWidget {
     final expiringSoonMemberships =
         expiringMembershipsWithinDays(memberships, now);
 
-    final today = DateTime(now.year, now.month, now.day);
-    final todayPayments = payments.where((p) {
-      final payDate = DateTime(p.paidAt.year, p.paidAt.month, p.paidAt.day);
-      return payDate.isAtSameMomentAs(today);
-    }).toList();
-    final todayRevenue =
-        todayPayments.fold<double>(0, (sum, p) => sum + p.amount);
+    final monthPayments = payments
+        .where((payment) =>
+            payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .toList()
+      ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
+    final monthRevenue =
+        monthPayments.fold<double>(0, (sum, payment) => sum + payment.amount);
+    final monthLabel = DateFormat.yMMMM('ar').format(now);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -597,7 +599,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                             children: [
                               Flexible(
                                 child: Text(
-                                  'إيرادات اليوم المستلمة',
+                                  'إيرادات شهر $monthLabel',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -613,7 +615,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            RtlSupport.formatEgp(todayRevenue),
+                            RtlSupport.formatEgp(monthRevenue),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -708,7 +710,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
             children: [
               const Expanded(
                 child: Text(
-                  'آخر الإيرادات والمدفوعات',
+                  'مدفوعات شهر $monthLabel',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
@@ -723,16 +725,16 @@ class _DashboardOverviewTab extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
 
-          if (data.payments.isEmpty)
-            _buildEmptyCard(context, 'لا يوجد مدفوعات مسجلة بعد.')
+          if (monthPayments.isEmpty)
+            _buildEmptyCard(context, 'لا توجد مدفوعات مسجلة خلال الشهر الحالي.')
           else
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: data.payments.length > 4 ? 4 : data.payments.length,
+              itemCount: monthPayments.length > 4 ? 4 : monthPayments.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
-                final payment = data.payments[index];
+                final payment = monthPayments[index];
                 return ListTile(
                   tileColor: context.appPalette.surfaceCard,
                   shape: RoundedRectangleBorder(
@@ -1108,7 +1110,7 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
 
 void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
   if (member.phone == null || member.phone!.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    showTopSnackBar(context, 
       SnackBar(
         content: const Text('هذا العضو ليس لديه رقم هاتف مسجل.'),
         backgroundColor: context.appPalette.error,
@@ -1329,7 +1331,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
 
       Navigator.of(context).pop();
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: Text(
             'تمت إضافة العضو "${newMember.fullName}" بنجاح!',
@@ -1348,7 +1350,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
         _isSaving = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content:
               Text('فشل الحفظ: $cleanMsg', textDirection: ui.TextDirection.rtl),
@@ -1597,7 +1599,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text(
                 persistedRemotely
@@ -1609,7 +1611,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('خطأ أثناء التعديل: $e',
                 textDirection: ui.TextDirection.rtl),
@@ -2038,7 +2040,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 await ref
                     .read(dataSyncServiceProvider.notifier)
                     .deleteMember(member.id);
-                ScaffoldMessenger.of(context).showSnackBar(
+                showTopSnackBar(context, 
                   const SnackBar(
                       content: Text('تم حذف العضو بنجاح',
                           textDirection: ui.TextDirection.rtl)),
@@ -2215,7 +2217,7 @@ class _PlansTab extends ConsumerWidget {
                 await ref
                     .read(dataSyncServiceProvider.notifier)
                     .deletePlan(plan.id);
-                ScaffoldMessenger.of(context).showSnackBar(
+                showTopSnackBar(context, 
                   const SnackBar(
                       content: Text('تم حذف الباقة بنجاح',
                           textDirection: ui.TextDirection.rtl)),
@@ -2271,7 +2273,7 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('تمت إضافة الباقة بنجاح!',
                 textDirection: ui.TextDirection.rtl),
@@ -2280,7 +2282,7 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('فشل الحفظ: $e', textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
@@ -2404,7 +2406,7 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('تم تعديل الباقة بنجاح!',
                 textDirection: ui.TextDirection.rtl),
@@ -2413,7 +2415,7 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content:
                 Text('فشل التعديل: $e', textDirection: ui.TextDirection.rtl),
@@ -2491,46 +2493,133 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
 // ==========================================
 // --- TAB 3: MEMBERSHIPS LOGS ---
 // ==========================================
-class _MembershipsTab extends ConsumerWidget {
+class _MembershipsTab extends ConsumerStatefulWidget {
   const _MembershipsTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MembershipsTab> createState() => _MembershipsTabState();
+}
+
+class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final data = ref.watch(dataSyncServiceProvider);
     final memberships = data.memberships;
     final membersById = {for (final member in data.members) member.id: member};
     final plansById = {for (final plan in data.plans) plan.id: plan};
+    final normalizedQuery = _normalizeSearchDigits(_searchQuery.trim());
+
+    final filteredMemberships = memberships.where((membership) {
+      if (normalizedQuery.isEmpty) return true;
+
+      final member = membersById[membership.memberId];
+      final plan = plansById[membership.planId];
+      final matchesMember =
+          member != null && memberMatchesSearch(member, normalizedQuery);
+      final matchesPlan = _normalizeSearchDigits(plan?.name ?? '')
+          .contains(normalizedQuery);
+      return matchesMember || matchesPlan;
+    }).toList();
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onChanged: (value) => setState(() => _searchQuery = value),
+            decoration: InputDecoration(
+              hintText: 'ابحث بالاسم أو رقم الهاتف أو الباقة...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _searchQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'مسح البحث',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    ),
+              filled: true,
+              fillColor: context.appPalette.surfaceCard,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
         Expanded(
-          child: memberships.isEmpty
+          child: filteredMemberships.isEmpty
               ? Center(
-                  child: Text('لا توجد اشتراكات مفعلة حالياً.',
-                      style:
-                          TextStyle(color: context.appPalette.textSecondary)))
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      memberships.isEmpty
+                          ? 'لا توجد اشتراكات مسجلة حالياً.'
+                          : 'لا توجد نتائج مطابقة للبحث.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: context.appPalette.textSecondary),
+                    ),
+                  ),
+                )
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: memberships.length,
+                  itemCount: filteredMemberships.length,
                   itemBuilder: (context, index) {
-                    final membership = memberships[index];
+                    final membership = filteredMemberships[index];
                     final member = membersById[membership.memberId] ??
                         Member(
-                            id: '',
-                            gymId: '',
-                            fullName: 'عضو محذوف',
-                            joinDate: DateTime.now(),
-                            createdAt: DateTime.now(),
-                            updatedAt: DateTime.now());
+                          id: '',
+                          gymId: '',
+                          fullName: 'عضو محذوف',
+                          joinDate: DateTime.now(),
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
                     final plan = plansById[membership.planId] ??
                         MembershipPlan(
-                            id: '',
-                            gymId: '',
-                            name: 'باقة مخصصة',
-                            createdAt: DateTime.now(),
-                            updatedAt: DateTime.now());
+                          id: '',
+                          gymId: '',
+                          name: 'باقة مخصصة',
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
 
-                    final expired = membership.isExpired;
+                    final startsInFuture = DateTime.utc(
+                      membership.startDate.year,
+                      membership.startDate.month,
+                      membership.startDate.day,
+                    ).isAfter(DateTime.utc(today.year, today.month, today.day));
+                    final expired = !startsInFuture && membership.isExpired;
+                    final cancelled = membership.status == 'cancelled';
+                    final statusColor = cancelled || expired
+                        ? context.appPalette.error
+                        : startsInFuture
+                            ? context.appPalette.primary
+                            : context.appPalette.success;
+                    final statusLabel = cancelled
+                        ? 'ملغى'
+                        : startsInFuture
+                            ? 'قادم'
+                            : expired
+                                ? 'منتهي'
+                                : 'ساري';
 
                     return Card(
                       color: context.appPalette.surfaceCard,
@@ -2538,42 +2627,48 @@ class _MembershipsTab extends ConsumerWidget {
                       child: ListTile(
                         onTap: () {
                           showDialog(
-                              context: context,
-                              builder: (_) => _EditMembershipDialog(
-                                  membership: membership));
+                            context: context,
+                            builder: (_) =>
+                                _EditMembershipDialog(membership: membership),
+                          );
                         },
                         leading: CircleAvatar(
-                          backgroundColor: expired
-                              ? context.appPalette.error.withValues(alpha: 0.12)
-                              : context.appPalette.success
-                                  .withValues(alpha: 0.12),
+                          backgroundColor:
+                              statusColor.withValues(alpha: 0.12),
                           child: Icon(
-                              expired
-                                  ? Icons.timer_off_rounded
-                                  : Icons.offline_bolt_rounded,
-                              color: expired
-                                  ? context.appPalette.error
-                                  : context.appPalette.success),
+                            startsInFuture
+                                ? Icons.event_available_rounded
+                                : expired || cancelled
+                                    ? Icons.timer_off_rounded
+                                    : Icons.offline_bolt_rounded,
+                            color: statusColor,
+                          ),
                         ),
-                        title: Text(member.fullName,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(
+                          member.fullName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                                'الباقة: ${plan.name} • القيمة: ${RtlSupport.formatEgp(membership.price)}',
-                                style: const TextStyle(fontSize: 12)),
+                              'الباقة: ${plan.name} • القيمة: ${RtlSupport.formatEgp(membership.price)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
                             Text(
-                                'من: ${RtlSupport.formatDate(membership.startDate)} إلى ${RtlSupport.formatDate(membership.endDate)}',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: context.appPalette.textSecondary)),
+                              'من: ${RtlSupport.formatDate(membership.startDate)} إلى ${RtlSupport.formatDate(membership.endDate)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.appPalette.textSecondary,
+                              ),
+                            ),
                             Text(
-                                'سجّل الاشتراك: ${data.creatorName(membership.createdBy)}',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: context.appPalette.textMuted)),
+                              'سجّل الاشتراك: ${data.creatorName(membership.createdBy)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.appPalette.textMuted,
+                              ),
+                            ),
                           ],
                         ),
                         trailing: Row(
@@ -2581,47 +2676,50 @@ class _MembershipsTab extends ConsumerWidget {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color: expired
-                                    ? context.appPalette.error
-                                        .withValues(alpha: 0.1)
-                                    : context.appPalette.success
-                                        .withValues(alpha: 0.1),
+                                color: statusColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                expired
-                                    ? 'منتهي'
-                                    : (membership.status == 'cancelled'
-                                        ? 'ملغى'
-                                        : 'ساري'),
+                                statusLabel,
                                 style: TextStyle(
-                                    color: expired
-                                        ? context.appPalette.error
-                                        : context.appPalette.success,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold),
+                                  color: statusColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                             IconButton(
-                              icon: Icon(Icons.edit_rounded,
-                                  size: 18,
-                                  color: context.appPalette.textSecondary),
+                              icon: Icon(
+                                Icons.edit_rounded,
+                                size: 18,
+                                color: context.appPalette.textSecondary,
+                              ),
                               tooltip: 'تعديل بيانات الاشتراك',
                               onPressed: () {
                                 showDialog(
-                                    context: context,
-                                    builder: (_) => _EditMembershipDialog(
-                                        membership: membership));
+                                  context: context,
+                                  builder: (_) => _EditMembershipDialog(
+                                    membership: membership,
+                                  ),
+                                );
                               },
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete_outline_rounded,
-                                  size: 18, color: context.appPalette.error),
+                              icon: Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                                color: context.appPalette.error,
+                              ),
                               tooltip: 'حذف الاشتراك',
                               onPressed: () => _confirmDeleteMembership(
-                                  context, ref, membership),
+                                context,
+                                ref,
+                                membership,
+                              ),
                             ),
                           ],
                         ),
@@ -2631,14 +2729,15 @@ class _MembershipsTab extends ConsumerWidget {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () {
                 showDialog<void>(
-                    context: context,
-                    builder: (_) => const _CreateMembershipDialog());
+                  context: context,
+                  builder: (_) => const _CreateMembershipDialog(),
+                );
               },
               icon: const Icon(Icons.add_task_rounded),
               label: const Text('تسجيل اشتراك لعضو'),
@@ -2672,7 +2771,7 @@ class _MembershipsTab extends ConsumerWidget {
                 await ref
                     .read(dataSyncServiceProvider.notifier)
                     .deleteMembership(membership.id);
-                ScaffoldMessenger.of(context).showSnackBar(
+                showTopSnackBar(context, 
                   const SnackBar(
                       content: Text('تم حذف الاشتراك بنجاح',
                           textDirection: ui.TextDirection.rtl)),
@@ -2898,7 +2997,7 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text(
                 isPending
@@ -2912,7 +3011,7 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('خطأ أثناء التعديل: $e',
                 textDirection: ui.TextDirection.rtl),
@@ -3099,7 +3198,7 @@ class _CreateMembershipDialogState
   Future<void> _handleSave() async {
     if (_isSaving) return;
     if (_selectedMemberId == null || _selectedPlanId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: const Text('يرجى اختيار العضو والباقة أولاً',
                 textDirection: ui.TextDirection.rtl),
@@ -3110,7 +3209,7 @@ class _CreateMembershipDialogState
 
     final data = ref.read(dataSyncServiceProvider);
     if (!data.members.any((member) => member.id == _selectedMemberId)) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: const Text('العضو المحدد غير متاح.'),
           backgroundColor: context.appPalette.error,
@@ -3120,7 +3219,7 @@ class _CreateMembershipDialogState
     }
     final price = double.tryParse(_priceCtrl.text);
     if (price == null || !price.isFinite || price <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: const Text(
             'أدخل سعراً صحيحاً أكبر من صفر.',
@@ -3151,7 +3250,7 @@ class _CreateMembershipDialogState
       if (!mounted) return;
       Navigator.of(context).pop();
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      showTopSnackBar(context, SnackBar(
         content: Text(
           result.isPending
               ? 'تم حفظ طلب الاشتراك محلياً، ولم يُؤكد بعد من الخادم.'
@@ -3165,7 +3264,7 @@ class _CreateMembershipDialogState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('تعذر تفعيل الاشتراك: $e',
                 textDirection: ui.TextDirection.rtl),
@@ -3350,20 +3449,57 @@ class _PaymentsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
+    final now = DateTime.now();
+    final monthLabel = DateFormat.yMMMM('ar').format(now);
+    final monthlyPayments = data.payments
+        .where((payment) =>
+            payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .toList()
+      ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
+    final monthlyRevenue = monthlyPayments.fold<double>(
+      0,
+      (sum, payment) => sum + payment.amount,
+    );
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Card(
+            color: context.appPalette.surfaceCard,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'مدفوعات شهر $monthLabel',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  Text(
+                    RtlSupport.formatEgp(monthlyRevenue),
+                    style: TextStyle(
+                      color: context.appPalette.success,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         Expanded(
-          child: data.payments.isEmpty
+          child: monthlyPayments.isEmpty
               ? Center(
-                  child: Text('لا توجد مدفوعات مسجلة حالياً.',
+                  child: Text('لا توجد مدفوعات مسجلة خلال الشهر الحالي.',
                       style:
                           TextStyle(color: context.appPalette.textSecondary)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: data.payments.length,
+                  itemCount: monthlyPayments.length,
                   itemBuilder: (context, index) {
-                    final payment = data.payments[index];
+                    final payment = monthlyPayments[index];
 
                     return Card(
                       color: context.appPalette.surfaceCard,
@@ -3492,7 +3628,7 @@ class _PaymentsTab extends ConsumerWidget {
                     .read(dataSyncServiceProvider.notifier)
                     .deletePayment(payment.id);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  showTopSnackBar(context, 
                     SnackBar(
                         content: Text('تم حذف الدفعة المالية بنجاح!',
                             textDirection: ui.TextDirection.rtl),
@@ -3562,7 +3698,7 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text(
                 isPending
@@ -3576,7 +3712,7 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('خطأ أثناء التعديل: $e',
                 textDirection: ui.TextDirection.rtl),
@@ -4009,7 +4145,7 @@ class _SettingsTab extends ConsumerWidget {
                     ? 'تمت مزامنة البيانات بنجاح.'
                     : (state.syncErrorMessage ??
                         'تعذرت المزامنة، راجع البيانات أو الصلاحيات.');
-                ScaffoldMessenger.of(context).showSnackBar(
+                showTopSnackBar(context, 
                   SnackBar(
                     content: Text(message, textDirection: ui.TextDirection.rtl),
                     backgroundColor: state.syncStatus == SyncStatus.synced
@@ -4189,7 +4325,7 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('تم تحديث بيانات الصالة الرياضية بنجاح!',
                 textDirection: ui.TextDirection.rtl),
@@ -4198,7 +4334,7 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('خطأ أثناء التعديل: $e',
                 textDirection: ui.TextDirection.rtl),
@@ -4294,7 +4430,7 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('تم تحديث الاسم بنجاح!',
                 textDirection: ui.TextDirection.rtl),
@@ -4303,7 +4439,7 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
             content: Text('خطأ أثناء التعديل: $e',
                 textDirection: ui.TextDirection.rtl),
