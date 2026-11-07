@@ -929,15 +929,15 @@ void main() {
       expect(retainedHistory.last.startDate, DateTime(2026, 10, 30));
     });
 
-    test('does not hide an expiry reminder when the next membership has a gap', () {
+    test('hides an old expiry reminder when the next membership is booked after a gap', () {
       final oldMembership = membership(
         id: 'old-membership',
         endDate: DateTime(2026, 10, 29),
       );
       final laterMembership = membership(
         id: 'later-membership',
-        startDate: DateTime(2026, 10, 31),
-        endDate: DateTime(2026, 11, 29),
+        startDate: DateTime(2026, 11, 1),
+        endDate: DateTime(2026, 11, 30),
       );
 
       expect(
@@ -945,7 +945,7 @@ void main() {
           [oldMembership, laterMembership],
           today,
         ),
-        [oldMembership],
+        isEmpty,
       );
     });
 
