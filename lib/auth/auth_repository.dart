@@ -194,7 +194,7 @@ class AuthRepository {
   ///
   /// CRITICAL SECURITY REQUIREMENT:
   /// - URL: https://rpwcjfayhdwbsnecomnk.supabase.co/functions/v1/join-gym
-  /// - Authorization: Bearer <accessToken>
+  /// - Authorization: Bearer `<accessToken>`
   /// - Body: {"full_name": "...", "invite_code": "..."}
   /// - Role assignment (coach/owner) and gym_id linkage are strictly performed server-side.
   Future<void> joinGym({
