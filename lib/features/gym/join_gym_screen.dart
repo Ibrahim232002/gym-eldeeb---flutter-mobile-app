@@ -61,7 +61,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
       if (success) {
         showTopSnackBar(context, 
           SnackBar(
-            content: Text(
+            content: const Text(
               'تم الانضمام للجيم بنجاح! مرحباً بك في جيم الديب.',
               textDirection: TextDirection.rtl,
               style: TextStyle(fontWeight: FontWeight.w600),
