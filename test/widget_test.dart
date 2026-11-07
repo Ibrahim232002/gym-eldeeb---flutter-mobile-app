@@ -833,13 +833,14 @@ void main() {
 
   group('Expiring membership boundaries', () {
     Membership membership({
+      String id = 'membership-expiring',
       DateTime? startDate,
       DateTime? endDate,
       String status = 'active',
       DateTime? deletedAt,
     }) =>
         Membership(
-          id: 'membership-expiring',
+          id: id,
           gymId: 'gym-1',
           memberId: 'member-1',
           startDate: startDate ?? DateTime(2026, 10, 1),
@@ -902,6 +903,49 @@ void main() {
           DateTime(2026, 10, 22, 23, 59),
         ),
         [expiringToday, expiringInSevenDays],
+      );
+    });
+
+    test('hides an old expiry reminder after a contiguous renewal is booked', () {
+      final oldMembership = membership(
+        id: 'old-membership',
+        endDate: DateTime(2026, 10, 29),
+      );
+      final renewedMembership = membership(
+        id: 'new-membership',
+        startDate: DateTime(2026, 10, 30),
+        endDate: DateTime(2026, 11, 28),
+      );
+
+      expect(
+        expiringMembershipsWithinDays(
+          [oldMembership, renewedMembership],
+          today,
+        ),
+        isEmpty,
+      );
+
+      // Renewal history remains intact; only the reminder list is filtered.
+      expect([oldMembership, renewedMembership], hasLength(2));
+    });
+
+    test('does not hide an expiry reminder when the next membership has a gap', () {
+      final oldMembership = membership(
+        id: 'old-membership',
+        endDate: DateTime(2026, 10, 29),
+      );
+      final laterMembership = membership(
+        id: 'later-membership',
+        startDate: DateTime(2026, 10, 31),
+        endDate: DateTime(2026, 11, 29),
+      );
+
+      expect(
+        expiringMembershipsWithinDays(
+          [oldMembership, laterMembership],
+          today,
+        ),
+        [oldMembership],
       );
     });
 
