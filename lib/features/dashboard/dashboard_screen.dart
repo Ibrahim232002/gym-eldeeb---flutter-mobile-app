@@ -726,7 +726,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
 
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'مدفوعات شهر $monthLabel',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
