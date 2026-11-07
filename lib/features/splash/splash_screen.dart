@@ -23,7 +23,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   void _checkInitialState() async {
     // Artificial small delay for smooth branding experience
-    await Future.delayed(const Duration(milliseconds: 1200));
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
 
     if (!mounted) return;
 
