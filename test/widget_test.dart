@@ -917,16 +917,16 @@ void main() {
         endDate: DateTime(2026, 11, 28),
       );
 
-      expect(
-        expiringMembershipsWithinDays(
-          [oldMembership, renewedMembership],
-          today,
-        ),
-        isEmpty,
-      );
+      final retainedHistory = [oldMembership, renewedMembership];
+      final reminders =
+          expiringMembershipsWithinDays(retainedHistory, today);
 
-      // Renewal history remains intact; only the reminder list is filtered.
-      expect([oldMembership, renewedMembership], hasLength(2));
+      expect(reminders, isEmpty);
+
+      // The reminder calculation must not mutate either historical record.
+      expect(retainedHistory, hasLength(2));
+      expect(retainedHistory.first.endDate, DateTime(2026, 10, 29));
+      expect(retainedHistory.last.startDate, DateTime(2026, 10, 30));
     });
 
     test('does not hide an expiry reminder when the next membership has a gap', () {
