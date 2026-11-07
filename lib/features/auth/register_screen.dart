@@ -55,7 +55,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       // Newly registered users have no gym and proceed directly to Join Gym
       showTopSnackBar(context, 
         SnackBar(
-          content: Text(
+          content: const Text(
             'تم إنشاء الحساب بنجاح! أدخل رمز الدعوة للانضمام لصالة الجيم.',
             textDirection: TextDirection.rtl,
             style: TextStyle(fontWeight: FontWeight.w600),
