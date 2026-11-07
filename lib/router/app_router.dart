@@ -14,8 +14,6 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// App Router Provider
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authNotifier = ref.watch(authNotifierProvider.notifier);
-
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/',
