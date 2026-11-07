@@ -27,6 +27,24 @@ final selectedTabProvider = StateProvider<int>((ref) => 0);
 /// Filter selection for members tab
 final memberFilterProvider = StateProvider<String>((ref) => 'all');
 
+const List<String> _arabicMonthNames = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
+
+String _formatArabicMonth(DateTime date) =>
+    '${_arabicMonthNames[date.month - 1]} ${date.year}';
+
 String _memberInitial(String fullName) {
   final trimmedName = fullName.trim();
   return trimmedName.isEmpty ? '؟' : trimmedName[0];
@@ -434,7 +452,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
     final monthRevenue =
         monthPayments.fold<double>(0, (sum, payment) => sum + payment.amount);
-    final monthLabel = DateFormat.yMMMM('ar').format(now);
+    final monthLabel = _formatArabicMonth(now);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -3450,7 +3468,7 @@ class _PaymentsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
     final now = DateTime.now();
-    final monthLabel = DateFormat.yMMMM('ar').format(now);
+    final monthLabel = _formatArabicMonth(now);
     final monthlyPayments = data.payments
         .where((payment) =>
             payment.paidAt.year == now.year && payment.paidAt.month == now.month)
