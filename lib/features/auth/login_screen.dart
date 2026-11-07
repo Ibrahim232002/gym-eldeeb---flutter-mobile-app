@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/top_snackbar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/auth_provider.dart';
@@ -56,7 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           'البريد الإلكتروني أو كلمة المرور غير صحيحة';
       setState(() => _localErrorMessage = error);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: Text(
             error,
