@@ -53,12 +53,19 @@ android {
 
     buildTypes {
         release {
-            // Never fall back to the debug key. Configure android/key.properties
-            // locally before building a distributable release APK/AAB.
             if (keystorePropertiesFile.exists()) {
+                // Use the private release keystore when it is configured locally.
                 signingConfig = signingConfigs.getByName("release")
             } else {
-                logger.warn("android/key.properties not found; release build will be unsigned.")
+                // Keep local release APKs installable while the developer has no
+                // release keystore configured. This debug certificate is for
+                // development/testing only and must not be used for distribution.
+                signingConfig = signingConfigs.getByName("debug")
+                logger.warn(
+                    "android/key.properties not found; signing release APK with the " +
+                        "debug keystore for local testing only. Configure a private release " +
+                        "keystore before publishing or distributing this app."
+                )
             }
         }
     }
