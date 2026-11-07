@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/top_snackbar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/auth_provider.dart';
@@ -58,7 +59,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
       if (!mounted) return;
 
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showTopSnackBar(context, 
           SnackBar(
             content: Text(
               'تم الانضمام للجيم بنجاح! مرحباً بك في جيم الديب.',
@@ -76,7 +77,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
       final errorMsg = e.toString().replaceAll('Exception: ', '').trim();
       setState(() => _localErrorMessage = errorMsg);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      showTopSnackBar(context, 
         SnackBar(
           content: Text(
             errorMsg,
