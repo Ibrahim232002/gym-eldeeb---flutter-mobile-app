@@ -176,10 +176,10 @@ List<Membership> expiringMembershipsWithinDays(
       membership.endDate.day,
     );
 
-    // A paid renewal that starts the day after this membership ends means
-    // the member has already renewed. Keep both records for history, but
-    // don't show the old record as an outstanding renewal reminder.
-    final hasImmediateRenewal = allMemberships.any((successor) {
+    // A later active membership means the member has already booked and
+    // paid for another period. A gap between periods does not make the old
+    // membership an outstanding renewal reminder. Both records stay intact.
+    final hasLaterRenewal = allMemberships.any((successor) {
       if (successor.id == membership.id ||
           successor.gymId != membership.gymId ||
           successor.memberId != membership.memberId ||
@@ -193,13 +193,10 @@ List<Membership> expiringMembershipsWithinDays(
         successor.startDate.month,
         successor.startDate.day,
       );
-      final daysBetween = successorStart.difference(membershipEnd).inDays;
-
-      // Membership end dates are inclusive, so the next day is contiguous.
-      return daysBetween == 1;
+      return successorStart.isAfter(membershipEnd);
     });
 
-    return !hasImmediateRenewal;
+    return !hasLaterRenewal;
   }).toList();
 }
 //
