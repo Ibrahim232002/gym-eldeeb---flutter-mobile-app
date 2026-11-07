@@ -244,12 +244,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         actions: [
           if (isOffline)
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Row(
                 children: [
                   Icon(Icons.wifi_off_rounded,
                       color: context.appPalette.error, size: 18),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text('أوفلاين',
                       style: TextStyle(
                           color: context.appPalette.error,
@@ -392,7 +392,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   void _confirmLogout(BuildContext context) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
@@ -474,7 +474,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                 children: [
                   Icon(Icons.warning_amber_rounded,
                       color: context.appPalette.error),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'فيه بيانات لسه متسجلتش على الحساب. هنحاول تاني لما الاتصال يستقر.',
@@ -562,7 +562,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                               color: context.appPalette.textPrimary),
                         ),
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           'جيم الديب',
@@ -625,7 +625,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                                       fontSize: 13),
                                 ),
                               ),
-                              SizedBox(width: 6),
+                              const SizedBox(width: 6),
                               Icon(Icons.arrow_forward_ios_rounded,
                                   size: 12,
                                   color: context.appPalette.textMuted),
@@ -664,7 +664,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
               const Expanded(
                 child: Text(
                   'آخر الأعضاء المسجلين',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
               TextButton(
@@ -707,7 +707,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                   trailing: Icon(Icons.arrow_forward_ios_rounded,
                       size: 14, color: context.appPalette.textMuted),
                   onTap: () {
-                    showModalBottomSheet(
+                    showModalBottomSheet<void>(
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: context.appPalette.surfaceCard,
@@ -934,9 +934,9 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                 children: [
                   _buildFilterChip('all', 'الكل (${members.length})'),
                   _buildFilterChip('active',
-                      'نشط (${activeCount})'),
+                      'نشط ($activeCount)'),
                   _buildFilterChip('inactive',
-                      'غير نشط (${inactiveCount})'),
+                      'غير نشط ($inactiveCount)'),
                 ],
               ),
             ],
@@ -1092,7 +1092,7 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
           padding: const EdgeInsets.all(16.0),
           child: ElevatedButton.icon(
             onPressed: () {
-              showDialog(
+              showDialog<void>(
                 context: context,
                 barrierDismissible: false,
                 builder: (_) => const _AddMemberDialog(),
@@ -1435,9 +1435,12 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                     prefixIcon: Icon(Icons.person_rounded),
                   ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty)
+                    if (v == null || v.trim().isEmpty) {
                       return 'يرجى إدخال اسم العضو';
-                    if (v.trim().length < 2) return 'الاسم قصير جداً';
+                    }
+                    if (v.trim().length < 2) {
+                      return 'الاسم قصير جداً';
+                    }
                     return null;
                   },
                 ),
@@ -1473,7 +1476,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                           children: [
                             Icon(Icons.calendar_today_rounded,
                                 size: 18, color: context.appPalette.primary),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text('تاريخ الانضمام:',
                                 style: TextStyle(
                                     fontSize: 13,
@@ -1710,7 +1713,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
                           children: [
                             Icon(Icons.calendar_today_rounded,
                                 size: 18, color: context.appPalette.primary),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text('تاريخ الانضمام:',
                                 style: TextStyle(
                                     fontSize: 13,
@@ -1778,8 +1781,12 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
         data.memberships.where((m) => m.memberId == member.id).toList();
     final memberPayments = data.payments.where((p) {
       if (p.membershipId != null &&
-          memberMemberships.any((m) => m.id == p.membershipId)) return true;
-      if (p.notes != null && p.notes!.contains(member.fullName)) return true;
+          memberMemberships.any((m) => m.id == p.membershipId)) {
+        return true;
+      }
+      if (p.notes != null && p.notes!.contains(member.fullName)) {
+        return true;
+      }
       return false;
     }).toList();
 
@@ -1881,7 +1888,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 TextButton.icon(
                   onPressed: () {
-                    showDialog(
+                    showDialog<void>(
                       context: context,
                       builder: (_) => _CreateMembershipDialog(
                           preSelectedMemberId: member.id),
@@ -1941,12 +1948,12 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 );
               }),
             const Divider(height: 28),
-            Wrap(
+            const Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
               runSpacing: 4,
               children: [
-                const Text('سجل المدفوعات والإيصالات',
+                Text('سجل المدفوعات والإيصالات',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               ],
@@ -1990,7 +1997,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                     icon: const Icon(Icons.edit_rounded, size: 18),
                     label: const Text('تعديل البيانات'),
                     onPressed: () {
-                      showDialog(
+                      showDialog<void>(
                         context: context,
                         builder: (_) => _EditMemberDialog(member: member),
                       );
@@ -2036,7 +2043,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
 
   void _confirmDeleteMember(
       BuildContext context, WidgetRef ref, Member member) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
@@ -2058,6 +2065,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                 await ref
                     .read(dataSyncServiceProvider.notifier)
                     .deleteMember(member.id);
+                if (!context.mounted) return;
                 showTopSnackBar(context, 
                   const SnackBar(
                       content: Text('تم حذف العضو بنجاح',
@@ -2171,7 +2179,7 @@ class _PlansTab extends ConsumerWidget {
                                               context.appPalette.textSecondary,
                                           size: 20),
                                       onPressed: () {
-                                        showDialog(
+                                        showDialog<void>(
                                             context: context,
                                             builder: (_) =>
                                                 _EditPlanDialog(plan: plan));
@@ -2215,7 +2223,7 @@ class _PlansTab extends ConsumerWidget {
 
   void _confirmDeletePlan(
       BuildContext context, WidgetRef ref, MembershipPlan plan) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
@@ -2235,6 +2243,7 @@ class _PlansTab extends ConsumerWidget {
                 await ref
                     .read(dataSyncServiceProvider.notifier)
                     .deletePlan(plan.id);
+                if (!context.mounted) return;
                 showTopSnackBar(context, 
                   const SnackBar(
                       content: Text('تم حذف الباقة بنجاح',
@@ -2293,7 +2302,7 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
 
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('تمت إضافة الباقة بنجاح!',
+            content: const Text('تمت إضافة الباقة بنجاح!',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.success),
       );
@@ -2426,7 +2435,7 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
 
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('تم تعديل الباقة بنجاح!',
+            content: const Text('تم تعديل الباقة بنجاح!',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.success),
       );
@@ -2644,7 +2653,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         onTap: () {
-                          showDialog(
+                          showDialog<void>(
                             context: context,
                             builder: (_) =>
                                 _EditMembershipDialog(membership: membership),
@@ -2718,7 +2727,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                               ),
                               tooltip: 'تعديل بيانات الاشتراك',
                               onPressed: () {
-                                showDialog(
+                                showDialog<void>(
                                   context: context,
                                   builder: (_) => _EditMembershipDialog(
                                     membership: membership,
@@ -2768,7 +2777,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
 
   void _confirmDeleteMembership(
       BuildContext context, WidgetRef ref, Membership membership) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
@@ -2789,6 +2798,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                 await ref
                     .read(dataSyncServiceProvider.notifier)
                     .deleteMembership(membership.id);
+                if (!context.mounted) return;
                 showTopSnackBar(context, 
                   const SnackBar(
                       content: Text('تم حذف الاشتراك بنجاح',
@@ -3602,7 +3612,7 @@ class _PaymentsTab extends ConsumerWidget {
                                         constraints: const BoxConstraints(
                                             minWidth: 48, minHeight: 48),
                                         onPressed: () {
-                                          showDialog(
+                                          showDialog<void>(
                                               context: context,
                                               builder: (_) =>
                                                   _EditPaymentDialog(
@@ -3637,7 +3647,7 @@ class _PaymentsTab extends ConsumerWidget {
 
   void _confirmDeletePayment(
       BuildContext context, WidgetRef ref, Payment payment) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
@@ -3661,7 +3671,7 @@ class _PaymentsTab extends ConsumerWidget {
                 if (context.mounted) {
                   showTopSnackBar(context, 
                     SnackBar(
-                        content: Text('تم حذف الدفعة المالية بنجاح!',
+                        content: const Text('تم حذف الدفعة المالية بنجاح!',
                             textDirection: ui.TextDirection.rtl),
                         backgroundColor: context.appPalette.success),
                   );
@@ -3771,8 +3781,9 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
                       labelText: 'المبلغ المستلم (ج.م) *'),
                   keyboardType: TextInputType.number,
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty)
+                    if (val == null || val.trim().isEmpty) {
                       return 'المبلغ مطلوب';
+                    }
                     final parsed = double.tryParse(val);
                     if (parsed == null || parsed <= 0) return 'أدخل مبلغ صحيح';
                     return null;
@@ -4284,7 +4295,7 @@ class _SettingsTab extends ConsumerWidget {
   }
 
   void _confirmLogout(BuildContext context, WidgetRef ref) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: ui.TextDirection.rtl,
@@ -4358,7 +4369,7 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
       Navigator.pop(context);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('تم تحديث بيانات الصالة الرياضية بنجاح!',
+            content: const Text('تم تحديث بيانات الصالة الرياضية بنجاح!',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.success),
       );
@@ -4463,7 +4474,7 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
       Navigator.pop(context);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('تم تحديث الاسم بنجاح!',
+            content: const Text('تم تحديث الاسم بنجاح!',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.success),
       );
