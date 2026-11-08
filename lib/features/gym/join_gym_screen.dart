@@ -62,7 +62,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
         showTopSnackBar(context, 
           SnackBar(
             content: const Text(
-              'تم الانضمام للجيم بنجاح! مرحباً بك في جيم الديب.',
+              'تمام، انضمامك للجيم تم بنجاح!',
               textDirection: TextDirection.rtl,
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -100,7 +100,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الانضمام لصالة الجيم'),
+        title: const Text('الانضمام للجيم'),
         actions: [
           IconButton(
             icon: Icon(Icons.logout_rounded, color: context.appPalette.error),
@@ -132,62 +132,12 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'حسابك غير مرتبط بصالة جيم حالياً. يرجى إدخال اسمك ورمز الدعوة للانضمام كمدرب أو شريك في إدارة جيم الديب.',
+                    'حسابك لسه مش مربوط بجيم. اكتب اسمك وكود الدعوة اللي وصلك من إدارة الجيم عشان تكمل.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 24),
 
-                  // Information Card about Secure Edge Function Join
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: context.appPalette.primary
-                                  .withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.vpn_key_rounded,
-                              color: context.appPalette.primary,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'تحقق أمني مشفر (Edge Function)',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                    color: context.appPalette.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'يتم إرسال رمز الدخول وتوكن الجلسة إلى دالة join-gym السحابية لمنح الصلاحيات وربط الجيم بأعلى معايير الأمان (RLS).',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                          color:
-                                              context.appPalette.textSecondary),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 20),
 
                   // Error notification if join failed
@@ -226,12 +176,12 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                   CustomTextField(
                     controller: _nameController,
                     label: 'الاسم الكامل',
-                    hint: 'الاسم المسجل في كادر الجيم',
+                    hint: 'اكتب اسمك بالكامل',
                     prefixIcon: Icons.person_outline_rounded,
                     readOnly: _isSubmitting,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
-                        return 'يرجى إدخال الاسم بالكامل';
+                        return 'اكتب اسمك بالكامل';
                       }
                       return null;
                     },
@@ -241,16 +191,16 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                   // Invite Code Input
                   CustomTextField(
                     controller: _codeController,
-                    label: 'رمز الدعوة (Invite Code)',
-                    hint: 'أدخل كود الدعوة الخاص بالجيم',
+                    label: 'كود الدعوة',
+                    hint: 'اكتب الكود اللي وصلك من الجيم',
                     prefixIcon: Icons.qr_code_rounded,
                     readOnly: _isSubmitting,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
-                        return 'يرجى إدخال رمز الدعوة';
+                        return 'اكتب كود الدعوة';
                       }
                       if (val.trim().length < 4) {
-                        return 'رمز الدعوة يجب ألا يقل عن 4 أحرف';
+                        return 'الكود لازم يكون 4 حروف أو أرقام على الأقل';
                       }
                       return null;
                     },
@@ -259,7 +209,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
 
                   // Action Button
                   PrimaryButton(
-                    text: 'تأكيد الرمز والانضمام للجيم',
+                    text: 'انضم للجيم',
                     icon: Icons.check_circle_outline_rounded,
                     isLoading: _isSubmitting,
                     onPressed: _handleJoin,
@@ -277,7 +227,7 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                             if (context.mounted) context.go('/login');
                           },
                     icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                    label: const Text('تسجيل الدخول بحساب آخر'),
+                    label: const Text('تسجيل الدخول بحساب تاني'),
                     style: TextButton.styleFrom(
                       foregroundColor: context.appPalette.textSecondary,
                     ),
