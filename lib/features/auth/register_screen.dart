@@ -88,7 +88,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
           backgroundColor: context.appPalette.primary,
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 6),
+          duration: const Duration(seconds: 6),
         ),
       );
       return;
@@ -106,7 +106,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
           backgroundColor: context.appPalette.success,
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 7),
+          duration: const Duration(seconds: 7),
         ),
       );
       return;
