@@ -12,7 +12,7 @@ import '../../widgets/primary_button.dart';
 /// Real Supabase Register Screen for Gym ElDeeb
 ///
 /// Features full name, email, password, confirm password,
-/// validation of all fields, and routes newly authenticated users directly to Join Gym.
+/// validation of all fields and sends new users to the gym invitation step.
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -64,7 +64,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         context,
         SnackBar(
           content: const Text(
-            'تم إنشاء الحساب بنجاح! أدخل رمز الدعوة للانضمام لصالة الجيم.',
+            'الحساب اتعمل بنجاح! دلوقتي اكتب كود الدعوة اللي وصلك من إدارة الجيم.',
             textDirection: TextDirection.rtl,
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
@@ -100,7 +100,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         context,
         SnackBar(
           content: const Text(
-            'تم إنشاء الحساب وإرسال رسالة تأكيد إلى بريدك الإلكتروني. أكّد البريد أولاً، ثم سجّل الدخول لإدخال كود الجيم.',
+            'الحساب اتعمل واتبعثتلك رسالة تأكيد على الإيميل. افتحها واضغط على الرابط، وبعدها سجّل دخولك عشان تدخل كود الجيم.',
             textDirection: TextDirection.rtl,
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
