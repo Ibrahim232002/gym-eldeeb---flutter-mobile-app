@@ -761,16 +761,16 @@ export default function App() {
 
   // Trigger Manual Sync
   const triggerManualSync = async () => {
-    setGlobalToast({ type: 'success', message: 'جاري مزامنة البيانات مع خوادم جيم الديب...' });
+    setGlobalToast({ type: 'success', message: 'بنحدّث بيانات الجيم...' });
     try {
       const gymId = gym?.id || profile?.gym_id;
       if (gymId) {
         await fetchGymData(gymId);
       }
-      setGlobalToast({ type: 'success', message: 'اكتملت مزامنة جميع الجداول بنجاح!' });
+      setGlobalToast({ type: 'success', message: 'كل البيانات اتحدّثت بنجاح!' });
       setTimeout(() => setGlobalToast(null), 3000);
     } catch (err: any) {
-      setGlobalToast({ type: 'error', message: 'فشل المزامنة: ' + (err?.message || 'خطأ بالاتصال') });
+      setGlobalToast({ type: 'error', message: 'مش قادرين نحدّث البيانات دلوقتي. اتأكد من الإنترنت وجرب تاني. });
       setTimeout(() => setGlobalToast(null), 3000);
     }
   };
@@ -928,11 +928,11 @@ export default function App() {
 
       if (error) {
         if (error.message.toLowerCase().includes('invalid login credentials')) {
-          setAuthError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+          setAuthError('الإيميل أو كلمة المرور مش صح. راجعهم وجرب تاني.');
         } else if (error.message.toLowerCase().includes('email not confirmed')) {
-          setAuthError('يرجى تأكيد بريدك الإلكتروني أولاً');
+          setAuthError('لسه محتاج تأكد بريدك الإلكتروني. افتح رسالة التأكيد وجرب تاني.');
         } else {
-          setAuthError(error.message);
+          setAuthError('مش قادرين نسجّل دخولك دلوقتي. راجع بياناتك وجرب تاني.');
         }
         setIsSubmitting(false);
         return;
@@ -942,7 +942,7 @@ export default function App() {
         await loadUserProfileAndGym(data.user.id, data.user.user_metadata?.full_name);
       }
     } catch (err: any) {
-      setAuthError(err.message || 'حدث خطأ غير متوقع أثناء تسجيل الدخول');
+      setAuthError('حصلت مشكلة وإحنا بنحاول نسجّل دخولك. جرّب تاني بعد شوية.');
     } finally {
       setIsSubmitting(false);
     }
@@ -980,10 +980,21 @@ export default function App() {
 
       if (error) {
         if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('user already exists')) {
-          setAuthError('هذا البريد الإلكتروني مسجل بالفعل، يرجى تسجيل الدخول');
+          setAuthError('الإيميل ده متسجل عندنا بالفعل. سجّل دخولك بنفس الإيميل وكلمة المرور.');
+        } else if (error.message.toLowerCase().includes('for security purposes') ||
+                   error.message.toLowerCase().includes('only request this after') ||
+                   error.message.toLowerCase().includes('rate limit') ||
+                   error.message.toLowerCase().includes('too many requests')) {
+          setAuthError('حاولت كذا مرة ورا بعض. استنى شوية وجرب تاني.');
         } else {
-          setAuthError(error.message);
+          setAuthError('حصلت مشكلة وإحنا بنعمل الحساب. اتأكد من البيانات وجرب تاني.');
         }
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (data.user?.identities?.length === 0) {
+        setAuthError('الإيميل ده متسجل عندنا بالفعل. سجّل دخولك بنفس الإيميل وكلمة المرور.');
         setIsSubmitting(false);
         return;
       }
@@ -991,19 +1002,19 @@ export default function App() {
       if (data.user) {
         // Set local name and route directly to Join Gym flow
         setJoinFullName(registerName.trim());
-        setAuthSuccess('تم إنشاء الحساب بنجاح! أدخل رمز الدعوة للانضمام للجيم.');
+        setAuthSuccess('الحساب اتعمل! دلوقتي دخّل كود الدعوة اللي وصلك من إدارة الجيم.');
 
         if (data.session) {
           await loadUserProfileAndGym(data.user.id, registerName.trim());
           setCurrentScreen('join-gym');
         } else {
           // If Supabase project requires email confirmation
-          setAuthSuccess('تم إنشاء الحساب بنجاح! يرجى مراجعة بريدك الإلكتروني لتأكيد التسجيل أو تسجيل الدخول.');
+          setAuthSuccess('الحساب اتعمل! افتح رسالة التأكيد اللي وصلتك على الإيميل، وبعدها سجّل دخولك عشان تدخل كود الجيم.');
           setTimeout(() => setCurrentScreen('login'), 2500);
         }
       }
     } catch (err: any) {
-      setAuthError(err.message || 'حدث خطأ أثناء إنشاء الحساب');
+      setAuthError('حصلت مشكلة وإحنا بنعمل الحساب. جرّب تاني بعد شوية.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1020,20 +1031,20 @@ export default function App() {
     const name = joinFullName.trim();
 
     if (!name) {
-      setAuthError('يرجى إدخال الاسم بالكامل');
+      setAuthError('اكتب اسمك بالكامل.');
       setIsSubmitting(false);
       return;
     }
 
     if (!code) {
-      setAuthError('يرجى إدخال رمز دعوة صحيح');
+      setAuthError('اكتب كود الدعوة اللي وصلك من إدارة الجيم.');
       setIsSubmitting(false);
       return;
     }
 
     const currentToken = session?.access_token;
     if (!currentToken) {
-      setAuthError('الجلسة غير صالحة، يرجى تسجيل الدخول مجدداً');
+      setAuthError('سجّل دخولك تاني وجرب.');
       setIsSubmitting(false);
       return;
     }
@@ -1052,29 +1063,29 @@ export default function App() {
 
       if (response.error) {
         const errorData = response.data;
-        const msg = errorData?.error || errorData?.message || response.error?.message || 'تعذر الانضمام للجيم، يرجى التأكد من كود الدعوة';
+        const msg = String(errorData?.error || errorData?.message || response.error?.message || 'join failed');
         let friendlyMsg = msg;
         if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('not found')) {
-          friendlyMsg = 'رمز الدعوة غير صحيح أو غير موجود';
+          friendlyMsg = 'كود الدعوة مش صحيح. اتأكد إنك كتبته زي ما وصلك.';
         } else if (msg.toLowerCase().includes('expire')) {
-          friendlyMsg = 'رمز الدعوة منتهي الصلاحية';
+          friendlyMsg = 'كود الدعوة انتهت صلاحيته. اطلب كود جديد من إدارة الجيم.';
         } else if (msg.toLowerCase().includes('max') || msg.toLowerCase().includes('limit') || msg.toLowerCase().includes('used')) {
-          friendlyMsg = 'تم استنفاد الحد الأقصى لاستخدام رمز الدعوة هذا';
+          friendlyMsg = 'كود الدعوة وصل للعدد المسموح. اطلب كود جديد من إدارة الجيم.';
         } else if (msg.toLowerCase().includes('already')) {
-          friendlyMsg = 'هذا الحساب مرتبط بالفعل بصالة جيم';
+          friendlyMsg = 'الحساب ده مربوط بجيم بالفعل. لو محتاج مساعدة، كلم إدارة الجيم.';
         }
-        setAuthError(friendlyMsg);
+        setAuthError(friendlyMsg === msg ? 'حصلت مشكلة وإحنا بنحاول نضمّك للجيم. راجع كود الدعوة وجرب تاني.' : friendlyMsg);
         setIsSubmitting(false);
         return;
       }
 
-      setAuthSuccess('تم الانضمام للجيم بنجاح! مرحباً بك في جيم الديب.');
+      setAuthSuccess('تمام، انضمامك للجيم تم بنجاح!');
       if (currentUser) {
         await loadUserProfileAndGym(currentUser.id, name);
       }
       setCurrentScreen('dashboard');
     } catch (err: any) {
-      setAuthError(err.message || 'حدث خطأ في الاتصال بالـ Edge Function');
+      setAuthError('حصلت مشكلة وإحنا بنحاول نضمّك للجيم. اتأكد من الإنترنت وجرب تاني.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1330,13 +1341,13 @@ export default function App() {
                         className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1 font-bold"
                       >
                         <LogOut className="w-3.5 h-3.5" />
-                        <span>تسجيل الخروج من Supabase</span>
+                        <span>تسجيل الخروج</span>
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className={`text-xs p-3 rounded-xl border text-center mt-3 ${isDark ? 'text-slate-400 bg-[#080C14] border-[#1E2B45]' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
-                    لا توجد جلسة نشطة حالياً. يمكنك تسجيل الدخول أو إنشاء حساب جديد في المحاكي لاختبار دورة المصادقة كاملة.
+                    مش عامل تسجيل دخول دلوقتي. سجّل دخولك أو اعمل حساب جديد.
                   </div>
                 )}
 
@@ -1379,7 +1390,7 @@ export default function App() {
                       <WifiOff className="w-4 h-4 text-rose-400" />
                     )}
                     <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      الاتصال: <b className={isOnline ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>{isOnline ? 'متصل (Online)' : 'أوفلاين (Offline)'}</b>
+                      الاتصال: <b className={isOnline ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>{isOnline ? 'متصل بالإنترنت بالإنترنت' : 'من غير إنترنت'}</b>
                     </span>
                   </div>
                   <button
@@ -1685,22 +1696,9 @@ export default function App() {
                         <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-2 text-[#D4AF37]">
                           <KeyRound className="w-7 h-7" />
                         </div>
-                        <h2 className={`text-lg font-black ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>الانضمام لصالة الجيم</h2>
+                        <h2 className={`text-lg font-black ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>الانضمام للجيم</h2>
                         <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          أهلاً بك يا {joinFullName || profile?.full_name || 'كابتن'}. يرجى إدخال اسمك ورمز الدعوة للانضمام كمدرب أو شريك في إدارة جيم الديب.
-                        </p>
-                      </div>
-
-                      {/* Edge Function Security Notice */}
-                      <div className={`border rounded-xl p-3 mb-3 text-xs space-y-1 ${
-                        isDark ? 'bg-[#0F1626] border-[#1E2B45] text-slate-300' : 'bg-white border-slate-200 text-slate-700 shadow-2xs'
-                      }`}>
-                        <div className="flex items-center gap-1.5 text-[#D4AF37] font-bold">
-                          <Shield className="w-3.5 h-3.5" />
-                          <span>تحقق أمني مشفر (Edge Function)</span>
-                        </div>
-                        <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          يتم إرسال رمز الدعوة مع توكن الجلسة (Bearer Token) مباشرة إلى دالة <code className="text-[#D4AF37] font-mono">join-gym</code> السحابية لربط الجيم ومنح الصلاحيات بأمان تام.
+                          أهلاً بيك يا {joinFullName || profile?.full_name || 'كابتن'}. حسابك لسه مش مربوط بجيم. اكتب اسمك وكود الدعوة اللي وصلك من الإدارة.
                         </p>
                       </div>
 
@@ -1720,7 +1718,7 @@ export default function App() {
                             onChange={e => setJoinFullName(e.target.value)}
                             required
                             disabled={isSubmitting}
-                            placeholder="الاسم المسجل في كادر الجيم"
+                            placeholder="اكتب اسمك بالكامل"
                             className={`w-full border rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/40 focus:border-[#D4AF37] disabled:opacity-60 transition ${
                               isDark ? 'bg-[#0F1626] border-[#1E2B45] text-slate-100' : 'bg-white border-slate-300 text-slate-900'
                             }`}
@@ -1728,14 +1726,14 @@ export default function App() {
                         </div>
 
                         <div>
-                          <label className={`block text-xs font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>رمز الدعوة (Invite Code)</label>
+                          <label className={`block text-xs font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>كود الدعوة</label>
                           <input
                             type="text"
                             value={joinInviteCode}
                             onChange={e => setJoinInviteCode(e.target.value.toUpperCase())}
                             required
                             disabled={isSubmitting}
-                            placeholder="مثال: ELDEEB-OWNER-2026"
+                            placeholder="اكتب كود الدعوة اللي وصلك"
                             className={`w-full border rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/40 focus:border-[#D4AF37] font-mono tracking-wider text-center disabled:opacity-60 transition ${
                               isDark ? 'bg-[#0F1626] border-[#1E2B45] text-[#D4AF37]' : 'bg-white border-slate-300 text-slate-900 font-bold'
                             }`}
@@ -1751,7 +1749,7 @@ export default function App() {
                             <RefreshCw className="w-4 h-4 animate-spin" />
                           ) : (
                             <>
-                              <span>تأكيد الرمز والانضمام للجيم</span>
+                              <span>انضم للجيم</span>
                               <Check className="w-4 h-4" />
                             </>
                           )}
@@ -2723,7 +2721,7 @@ export default function App() {
                                 جدول <code className="text-[#D4AF37]">gyms</code> في قاعدة بيانات Supabase الحالية لا يحتوي على عمود للعنوان/الموقع الجغرافي. تم الالتزام بالمخطط الرسمي وعدم اختلاق أعمدة غير موجودة.
                               </p>
                               <p>
-                                معرف الجيم (<code className="text-[#D4AF37]">gym_id</code>) ورتبة الحساب (<code className="text-[#D4AF37]">role</code>) محمية وغير قابلة للتعديل للحفاظ على عزل البيانات وقواعد RLS.
+                                بيانات ربط حسابك بالجيم بتتحدد وقت الانضمام ومش بتتغير من هنا.
                               </p>
                             </div>
                           </div>
@@ -2857,7 +2855,7 @@ export default function App() {
                                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                                   isOnline ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                                 }`}>
-                                  {isOnline ? 'متصل بالشبكة (Online)' : 'غير متصل (Offline Cache Active)'}
+                                  {isOnline ? 'متصل بالإنترنت' : 'مفيش اتصال بالإنترنت'}
                                 </span>
                               </div>
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
