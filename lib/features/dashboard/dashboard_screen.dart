@@ -1439,7 +1439,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                       return 'اكتب اسم العضو.';
                     }
                     if (v.trim().length < 2) {
-                      return 'الاسم قصير جداً';
+                      return 'الاسم قصير، اكتبه كامل.';
                     }
                     return null;
                   },
@@ -1634,7 +1634,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('خطأ أثناء التعديل: $e',
+            content: const Text('مش قادرين نحفظ التعديل دلوقتي. اتأكد من البيانات وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
@@ -3029,7 +3029,7 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
         SnackBar(
             content: Text(
                 isPending
-                    ? 'تم حفظ التعديل محلياً، ولم يؤكده الخادم بعد.'
+                    ? 'التعديل اتحفظ على الجهاز، وهيروح للجيم أول ما الإنترنت يرجع.'
                     : 'تم تحديث بيانات الاشتراك بنجاح!',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: isPending
@@ -3067,7 +3067,7 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
                   isExpanded: true,
                   initialValue: _planId,
                   decoration:
-                      const InputDecoration(labelText: 'خطة / باقة الاشتراك'),
+                      const InputDecoration(labelText: 'باقة الاشتراك'),
                   items: data.plans.map((p) {
                     return DropdownMenuItem(
                       value: p.id,
@@ -3239,7 +3239,7 @@ class _CreateMembershipDialogState
     if (!data.members.any((member) => member.id == _selectedMemberId)) {
       showTopSnackBar(context, 
         SnackBar(
-          content: const Text('العضو المحدد غير متاح.'),
+          content: const Text('مش لاقيين العضو ده دلوقتي. اختاره تاني.'),
           backgroundColor: context.appPalette.error,
         ),
       );
@@ -3250,7 +3250,7 @@ class _CreateMembershipDialogState
       showTopSnackBar(context, 
         SnackBar(
           content: const Text(
-            'أدخل سعراً صحيحاً أكبر من صفر.',
+            'اكتب مبلغ أكبر من صفر.',
             textDirection: ui.TextDirection.rtl,
           ),
           backgroundColor: context.appPalette.error,
