@@ -4219,7 +4219,7 @@ class _SettingsTab extends ConsumerWidget {
                       'حالة تحديث البيانات',
                       syncService.syncStatus == SyncStatus.synced
                           ? 'كل البيانات محدثة'
-                          : 'فيه بيانات لسه بتتحدّث'),
+                          : 'فيه بيانات لسه محتاجة تتحدّث'),
                 ],
               ),
             ),
