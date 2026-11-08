@@ -6,6 +6,7 @@ import '../data/models/gym.dart';
 enum SignUpOutcome {
   signedIn,
   emailConfirmationRequired,
+  alreadyRegistered,
   failed,
 }
 
