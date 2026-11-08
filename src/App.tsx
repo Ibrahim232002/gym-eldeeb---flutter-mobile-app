@@ -1241,7 +1241,7 @@ export default function App() {
                 }`}
               >
                 <FileCode className="w-3.5 h-3.5" />
-                <span>أكواد Flutter</span>
+                <span>ملفات التطبيق</span>
               </button>
               <button
                 onClick={() => setActiveTab('schema')}
@@ -1291,7 +1291,7 @@ export default function App() {
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><b>حماية الرتب والجيم (RLS):</b> لا يمكن للعميل ترقية رتبته؛ التوجيه فوراً لـ Join Gym.</span>
+                    <span><b>خصوصية البيانات:</b> كل حساب بيشوف بيانات الجيم اللي انضم له بس.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
@@ -1462,8 +1462,8 @@ export default function App() {
                         <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-3 text-[#D4AF37]">
                           <Dumbbell className="w-8 h-8 stroke-[2.5]" />
                         </div>
-                        <h2 className={`text-xl font-black ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>تسجيل الدخول للمدربين والمالكين</h2>
-                        <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>سجل دخولك لمتابعة صالة الألعاب الرياضية والاشتراكات</p>
+                        <h2 className={`text-xl font-black ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>تسجيل الدخول لفريق جيم الديب</h2>
+                        <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>سجّل دخولك عشان تتابع بيانات الجيم والاشتراكات.</p>
                       </div>
 
                       {authSuccess && (
@@ -4027,7 +4027,7 @@ export default function App() {
                         </div>
                         <h4 className={`font-bold text-sm ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>تأكيد تسجيل الخروج</h4>
                         <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          هل تريد تأكيد تسجيل الخروج من جلسة كابتن جيم الديب الحالية؟
+                          هل تريد متأكد إنك عايز تسجّل خروج من جيم الديب؟
                         </p>
                         <div className="flex gap-2 pt-2">
                           <button
