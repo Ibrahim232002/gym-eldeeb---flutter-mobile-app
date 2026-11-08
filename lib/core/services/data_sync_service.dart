@@ -445,8 +445,8 @@ class DataSyncService extends ChangeNotifier {
     await _addToQueue(table, action, payload);
     _syncStatus = error == null ? SyncStatus.offline : SyncStatus.error;
     _syncErrorMessage = error == null
-        ? 'تم حفظ التغييرات محلياً، وستتم مزامنتها عند توفر الاتصال.'
-        : 'تعذر تأكيد التغيير من الخادم، وحُفظ محلياً لإعادة المحاولة: $error';
+        ? 'التغييرات اتحفظت على جهازك، وهتتحدّث أول ما الإنترنت يرجع.'
+        : 'التغيير اتحفظ على جهازك، لكن لسه ما اتسجلش على حساب الجيم. هنحاول تاني لما الاتصال يرجع.';
     notifyListeners();
   }
 
@@ -537,7 +537,7 @@ class DataSyncService extends ChangeNotifier {
         _syncStatus = SyncStatus.error;
         if (duplicateMembershipCount > 0) {
           _syncErrorMessage =
-              'تعذر تأكيد اشتراك معلّق لأن للعضو اشتراكاً سارياً في الفترة نفسها. راجع الطلب قبل إعادة المحاولة.';
+              'العضو ده عنده اشتراك ساري في نفس الفترة. راجع الاشتراك قبل ما تحاول تاني.';
         } else if (duplicateMemberNameCount > 0 ||
             duplicateMemberPhoneCount > 0) {
           _syncErrorMessage = [
@@ -548,15 +548,15 @@ class DataSyncService extends ChangeNotifier {
           ].join('\n');
         } else if (blockedCount > 0) {
           _syncErrorMessage =
-              'هناك $blockedCount عملية معلقة بسبب خطأ دائم. راجع الصلاحيات أو البيانات ثم استخدم المزامنة اليدوية لإعادة المحاولة.';
+              'فيه تغييرات ما اتحفظتش. راجع البيانات وجرب تحدّثها تاني.';
         } else {
           _syncErrorMessage =
-              'تعذر مزامنة $failedCount عملية. ستتم إعادة المحاولة تلقائياً للأخطاء المؤقتة.';
+              'فيه تغييرات ما اتحدّثتش دلوقتي. هنحاول تاني تلقائيًا لما الاتصال يتحسن.';
         }
       }
     } catch (e) {
       _syncStatus = SyncStatus.error;
-      _syncErrorMessage = e.toString().replaceAll('Exception: ', '');
+      _syncErrorMessage = 'مش قادرين نحدّث بيانات الجيم دلوقتي. اتأكد من الإنترنت وجرب تاني.';
     } finally {
       _syncInProgress = false;
       notifyListeners();
