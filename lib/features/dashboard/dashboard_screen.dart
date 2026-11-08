@@ -80,7 +80,7 @@ Future<void> _saveTheme(
     if (!context.mounted) return;
     showTopSnackBar(context, 
       SnackBar(
-        content: Text('مش قادرين نحفظ شكل التطبيق دلوقتي. جرّب تاني.'),
+        content: const Text('مش قادرين نحفظ شكل التطبيق دلوقتي. جرّب تاني.'),
         backgroundColor: context.appPalette.error,
       ),
     );
@@ -2329,7 +2329,7 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('مش قادرين نحفظ الباقة دلوقتي. جرّب تاني.', textDirection: ui.TextDirection.rtl),
+            content: const Text('مش قادرين نحفظ الباقة دلوقتي. جرّب تاني.', textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
     }
@@ -2463,7 +2463,7 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
       showTopSnackBar(context, 
         SnackBar(
             content:
-                Text('مش قادرين نعدّل الباقة دلوقتي. جرّب تاني.', textDirection: ui.TextDirection.rtl),
+                const Text('مش قادرين نعدّل الباقة دلوقتي. جرّب تاني.', textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
     }
@@ -3312,7 +3312,7 @@ class _CreateMembershipDialogState
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('مش قادرين نفعّل الاشتراك دلوقتي. راجع بياناته وجرب تاني.',
+            content: const Text('مش قادرين نفعّل الاشتراك دلوقتي. راجع بياناته وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
