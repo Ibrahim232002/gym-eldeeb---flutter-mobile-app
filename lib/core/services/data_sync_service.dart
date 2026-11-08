@@ -22,7 +22,7 @@ class DuplicateActiveMembershipException implements Exception {
   const DuplicateActiveMembershipException();
 
   @override
-  String toString() => 'هذا العضو لديه اشتراك ساري خلال هذه الفترة.';
+  String toString() => 'العضو ده عنده اشتراك ساري في الفترة دي.';
 }
 
 class DuplicateMemberException implements Exception {
@@ -32,8 +32,8 @@ class DuplicateMemberException implements Exception {
 
   @override
   String toString() => switch (field) {
-        DuplicateMemberField.name => 'اسم العضو مسجل بالفعل في هذا الجيم.',
-        DuplicateMemberField.phone => 'رقم الموبايل مسجل بالفعل في هذا الجيم.',
+        DuplicateMemberField.name => 'الاسم ده متسجل بالفعل في الجيم.',
+        DuplicateMemberField.phone => 'رقم الموبايل ده متسجل بالفعل في الجيم.',
         DuplicateMemberField.unknown =>
           'اسم العضو أو رقم الهاتف مستخدم بالفعل في هذه الصالة.',
       };
