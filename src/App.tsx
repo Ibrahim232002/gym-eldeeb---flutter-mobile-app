@@ -1325,14 +1325,8 @@ export default function App() {
                       <span className="font-semibold">{profile?.full_name || 'غير محدد'}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>الرتبة:</span>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-[#D4AF37] border border-amber-500/30">
-                        {profile?.role === 'owner' ? 'مالك (Owner)' : 'مدرب (Coach)'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
                       <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>الجيم:</span>
-                      <span>{gym?.name || (profile?.gym_id ? 'معرف: ' + profile.gym_id.substring(0, 8) + '...' : 'لم ينضم بعد')}</span>
+                      <span>{gym?.name || 'لسه ما انضمّتش لجيم'}</span>
                     </div>
                     <div className={`pt-2 border-t flex justify-end ${isDark ? 'border-[#1E2B45]' : 'border-slate-200'}`}>
                       <button
@@ -1438,7 +1432,7 @@ export default function App() {
                 {!isOnline && (
                   <div className="bg-rose-600 text-white text-[11px] py-1 px-3 text-center flex items-center justify-center gap-1.5 font-bold animate-fadeIn">
                     <WifiOff className="w-3 h-3" />
-                    <span>وضع أوفلاين (غير متصل) - يتم حفظ التغييرات محلياً</span>
+                    <span>وضع من غير إنترنت (غير متصل) - يتم حفظ التغييرات محلياً</span>
                   </div>
                 )}
 
