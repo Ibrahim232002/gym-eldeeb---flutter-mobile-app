@@ -62,7 +62,7 @@ Future<void> _saveTheme(
     if (!context.mounted) return;
     showTopSnackBar(context, 
       SnackBar(
-        content: Text('تعذر حفظ المظهر: $error'),
+        content: Text('مش قادرين نحفظ شكل التطبيق دلوقتي. جرّب تاني.'),
         backgroundColor: context.appPalette.error,
       ),
     );
@@ -962,7 +962,7 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                                 const SizedBox(height: 12),
                                 Text(
                                   data.syncErrorMessage ??
-                                      'تعذر تحميل بيانات الأعضاء.',
+                                      'مش قادرين نحمّل بيانات الأعضاء دلوقتي. جرّب تحديث البيانات.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                       color: context.appPalette.textSecondary),
@@ -1371,7 +1371,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
       showTopSnackBar(context, 
         SnackBar(
           content:
-              Text('فشل الحفظ: $cleanMsg', textDirection: ui.TextDirection.rtl),
+              Text('مش قادرين نحفظ بيانات العضو دلوقتي. $cleanMsg', textDirection: ui.TextDirection.rtl),
           backgroundColor: context.appPalette.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1436,7 +1436,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) {
-                      return 'يرجى إدخال اسم العضو';
+                      return 'اكتب اسم العضو.';
                     }
                     if (v.trim().length < 2) {
                       return 'الاسم قصير جداً';
@@ -2311,7 +2311,7 @@ class _AddPlanDialogState extends ConsumerState<_AddPlanDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('فشل الحفظ: $e', textDirection: ui.TextDirection.rtl),
+            content: Text('مش قادرين نحفظ الباقة دلوقتي. جرّب تاني.', textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
     }
@@ -2445,7 +2445,7 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
       showTopSnackBar(context, 
         SnackBar(
             content:
-                Text('فشل التعديل: $e', textDirection: ui.TextDirection.rtl),
+                Text('مش قادرين نعدّل الباقة دلوقتي. جرّب تاني.', textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
     }
@@ -2841,7 +2841,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
               const Icon(Icons.cloud_off_rounded, size: 40),
               const SizedBox(height: 12),
               Text(
-                data.syncErrorMessage ?? 'تعذر تحميل الاشتراكات.',
+                data.syncErrorMessage ?? 'مش قادرين نحمّل الاشتراكات دلوقتي. جرّب تحديث البيانات.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -2874,7 +2874,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
         if (data.syncStatus == SyncStatus.error)
           MaterialBanner(
             content: Text(
-              data.syncErrorMessage ?? 'تعذر تحديث بيانات الاشتراكات.',
+              data.syncErrorMessage ?? 'مش قادرين نحدّث بيانات الاشتراكات دلوقتي. جرّب تاني.',
             ),
             leading: const Icon(Icons.cloud_off_rounded),
             actions: [
@@ -3228,7 +3228,7 @@ class _CreateMembershipDialogState
     if (_selectedMemberId == null || _selectedPlanId == null) {
       showTopSnackBar(context, 
         SnackBar(
-            content: const Text('يرجى اختيار العضو والباقة أولاً',
+            content: const Text('اختار العضو والباقة الأول.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
@@ -3281,7 +3281,7 @@ class _CreateMembershipDialogState
       showTopSnackBar(context, SnackBar(
         content: Text(
           result.isPending
-              ? 'تم حفظ طلب الاشتراك محلياً، ولم يُؤكد بعد من الخادم.'
+              ? 'طلب الاشتراك اتحفظ على الجهاز، ولسه مستني الاتصال عشان يتسجل في الجيم.'
               : 'تم تفعيل الاشتراك بنجاح!',
           textDirection: ui.TextDirection.rtl,
         ),
@@ -3294,7 +3294,7 @@ class _CreateMembershipDialogState
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('تعذر تفعيل الاشتراك: $e',
+            content: Text('مش قادرين نفعّل الاشتراك دلوقتي. راجع بياناته وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
