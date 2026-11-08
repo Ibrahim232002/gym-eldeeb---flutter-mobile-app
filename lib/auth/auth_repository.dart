@@ -121,7 +121,7 @@ class AuthRepository {
       final msg = e.toString().toLowerCase();
       if (msg.contains('socket') || msg.contains('network')) {
         throw Exception(
-            'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
+            'مش قادرين نتصل دلوقتي. اتأكد من الإنترنت وجرب تاني.');
       }
       throw Exception('حصلت مشكلة وإحنا بنعمل الحساب. جرّب تاني بعد شوية.');
     }
