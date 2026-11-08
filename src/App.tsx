@@ -1283,11 +1283,11 @@ export default function App() {
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><b>شاشة الدخول (Login):</b> مصادقة Supabase حقيقية، مؤشر تحميل، ورسائل خطأ عربية.</span>
+                    <span><b>تسجيل الدخول:</b> ادخل بحسابك وتابع شغلك بسهولة.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><b>شاشة التسجيل (Register):</b> الاسم، البريد، كلمة المرور، وتأكيد كلمة المرور.</span>
+                    <span><b>إنشاء حساب:</b> اكتب اسمك وبريدك وكلمة المرور.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
@@ -1310,7 +1310,7 @@ export default function App() {
                   <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold ${
                     currentUser ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600'
                   }`}>
-                    {currentUser ? 'مستخدم نشط (Active)' : 'غير مسجل (Guest)'}
+                    {currentUser ? 'مسجل دخول' : 'مش مسجل دخول'}
                   </span>
                 </div>
 
