@@ -27,6 +27,24 @@ final selectedTabProvider = StateProvider<int>((ref) => 0);
 /// Filter selection for members tab
 final memberFilterProvider = StateProvider<String>((ref) => 'all');
 
+String _friendlyMemberSaveError(Object error) {
+  if (error is DuplicateMemberExceptionWithCleanup) {
+    return '${DuplicateMemberException(error.field)} وتعذر حذف الصورة المؤقتة. جرّب مرة تانية من غير صورة.';
+  }
+  if (error is DuplicateMemberException) {
+    return error.toString();
+  }
+
+  final raw = error.toString().toLowerCase();
+  if (raw.contains('socket') || raw.contains('network') || raw.contains('connection')) {
+    return 'الاتصال مش مستقر. اتأكد من الإنترنت وجرب تاني.';
+  }
+  if (raw.contains('23505') || raw.contains('duplicate key')) {
+    return 'الاسم أو رقم الموبايل ده متسجل بالفعل في الجيم.';
+  }
+  return 'حصلت مشكلة وإحنا بنحفظ بيانات العضو. اتأكد من البيانات وجرب تاني.';
+}
+
 const List<String> _arabicMonthNames = [
   'يناير',
   'فبراير',
@@ -1362,16 +1380,16 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
       );
     } catch (e) {
       if (!mounted) return;
-      final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
+      final friendlyMessage = _friendlyMemberSaveError(e);
       setState(() {
-        _errorMessage = cleanMsg;
+        _errorMessage = friendlyMessage;
         _isSaving = false;
       });
 
-      showTopSnackBar(context, 
+      showTopSnackBar(
+        context,
         SnackBar(
-          content:
-              Text('مش قادرين نحفظ بيانات العضو دلوقتي. $cleanMsg', textDirection: ui.TextDirection.rtl),
+          content: Text(friendlyMessage, textDirection: ui.TextDirection.rtl),
           backgroundColor: context.appPalette.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -3041,7 +3059,7 @@ class _EditMembershipDialogState extends ConsumerState<_EditMembershipDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('خطأ أثناء التعديل: $e',
+            content: const Text('مش قادرين نحفظ التعديل دلوقتي. اتأكد من البيانات وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
@@ -3755,7 +3773,7 @@ class _EditPaymentDialogState extends ConsumerState<_EditPaymentDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('خطأ أثناء التعديل: $e',
+            content: const Text('مش قادرين نحفظ التعديل دلوقتي. اتأكد من البيانات وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
@@ -4069,7 +4087,7 @@ class _SettingsTab extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildSectionHeader(
-            'معلومات الصالة الرياضية (جيم الديب)',
+            'بيانات الجيم',
             TextButton.icon(
               onPressed: () {
                 showDialog<void>(
@@ -4088,7 +4106,7 @@ class _SettingsTab extends ConsumerWidget {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  _buildSettingRow(context, 'اسم الصالة (العربي)',
+                  _buildSettingRow(context, 'اسم الجيم',
                       auth.gym?.name ?? 'جيم الديب'),
                 ],
               ),
@@ -4097,7 +4115,7 @@ class _SettingsTab extends ConsumerWidget {
           const SizedBox(height: 8),
           const SizedBox(height: 20),
           _buildSectionHeader(
-            'الملف الشخصي للكابتن',
+            'حسابي',
             TextButton.icon(
               onPressed: () {
                 showDialog<void>(
@@ -4378,7 +4396,7 @@ class _EditGymInfoDialogState extends ConsumerState<_EditGymInfoDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('خطأ أثناء التعديل: $e',
+            content: const Text('مش قادرين نحفظ التعديل دلوقتي. اتأكد من البيانات وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
@@ -4483,7 +4501,7 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
       setState(() => _isSaving = false);
       showTopSnackBar(context, 
         SnackBar(
-            content: Text('خطأ أثناء التعديل: $e',
+            content: const Text('مش قادرين نحفظ التعديل دلوقتي. اتأكد من البيانات وجرب تاني.',
                 textDirection: ui.TextDirection.rtl),
             backgroundColor: context.appPalette.error),
       );
