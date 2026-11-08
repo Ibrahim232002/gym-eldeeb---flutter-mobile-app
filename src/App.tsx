@@ -1390,7 +1390,7 @@ export default function App() {
                       <WifiOff className="w-4 h-4 text-rose-400" />
                     )}
                     <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      الاتصال: <b className={isOnline ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>{isOnline ? 'متصل بالإنترنت بالإنترنت' : 'من غير إنترنت'}</b>
+                      الاتصال: <b className={isOnline ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>{isOnline ? 'متصل بالإنترنت' : 'من غير إنترنت'}</b>
                     </span>
                   </div>
                   <button
@@ -1404,19 +1404,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Edge Function & Backend Endpoints */}
-              <div className={`border rounded-2xl p-4 text-xs space-y-1.5 transition-colors ${isDark ? 'bg-[#0F1626]/70 border-[#1E2B45] text-slate-400' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}>
-                <div className="flex items-center gap-1.5 text-[#D4AF37] font-bold">
-                  <Shield className="w-3.5 h-3.5" />
-                  <span>دالة الانضمام السحابية (Edge Function):</span>
-                </div>
-                <p className={`font-mono text-[11px] break-all ${isDark ? 'text-slate-300' : 'text-slate-800'}`}>
-                  https://rpwcjfayhdwbsnecomnk.supabase.co/functions/v1/join-gym
-                </p>
-                <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  يتم التحقق من كود الدعوة وتحديد صلاحيات المالك المشترك تلقائياً من جهة السيرفر، مع منع تعديل الجيم أو الرول من طرف التطبيق.
-                </p>
-              </div>
             </div>
 
             {/* Right Column: High-Fidelity Mobile Device Mockup */}
@@ -2703,28 +2690,7 @@ export default function App() {
                                 <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>العملة المعتمدة:</span>
                                 <span className="font-bold text-[#D4AF37]">{gym?.currency || 'EGP'}</span>
                               </div>
-                              <div className="flex justify-between py-1">
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>معرف الجيم (gym_id):</span>
-                                <span className="font-mono text-[10px] text-slate-500 truncate max-w-[150px]">{gym?.id || profile?.gym_id || 'غير متوفر'}</span>
-                              </div>
                             </div>
-
-                            {/* Database Schema Compliance Notice */}
-                            <div className={`p-2 rounded-lg border text-[10px] space-y-1 ${
-                              isDark ? 'bg-[#080C14] border-[#1E2B45] text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-                            }`}>
-                              <div className="text-[#D4AF37] font-bold flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
-                                <span>تنبيه مخطط قاعدة البيانات (Database Schema):</span>
-                              </div>
-                              <p>
-                                جدول <code className="text-[#D4AF37]">gyms</code> في قاعدة بيانات Supabase الحالية لا يحتوي على عمود للعنوان/الموقع الجغرافي. تم الالتزام بالمخطط الرسمي وعدم اختلاق أعمدة غير موجودة.
-                              </p>
-                              <p>
-                                بيانات ربط حسابك بالجيم بتتحدد وقت الانضمام ومش بتتغير من هنا.
-                              </p>
-                            </div>
-                          </div>
 
                           {/* 2. MY PROFILE */}
                           <div className={`p-3.5 rounded-xl border space-y-2.5 transition ${
@@ -2837,7 +2803,7 @@ export default function App() {
                             <div className={`flex items-center justify-between pb-2 border-b ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
                               <div className="flex items-center gap-2">
                                 <RefreshCw className="w-4 h-4 text-emerald-400" />
-                                <h4 className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>حالة المزامنة والربط السحابي</h4>
+                                <h4 className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>حالة تحديث البيانات</h4>
                               </div>
                               <button
                                 type="button"
@@ -2845,7 +2811,7 @@ export default function App() {
                                 className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 font-bold text-xs rounded-lg flex items-center gap-1 transition btn-tactile"
                               >
                                 <RefreshCw className="w-3 h-3" />
-                                <span>مزامنة فورية الآن</span>
+                                <span>حدّث البيانات دلوقتي</span>
                               </button>
                             </div>
 
@@ -4209,67 +4175,45 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: RLS & EDGE FUNCTION AUDIT */}
+        {/* TAB 3: KEEPING GYM DATA PRIVATE */}
         {activeTab === 'schema' && (
           <div className={`border rounded-2xl p-6 shadow-lg space-y-6 transition ${
             isDark ? 'bg-[#0F1626] border-[#1E2B45]' : 'bg-white border-slate-200 shadow-sm'
           }`}>
-            <div className={`flex items-center justify-between border-b pb-4 ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
+            <div className={`flex items-center gap-3 border-b pb-4 ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
+              <Shield className="w-6 h-6 text-emerald-400" />
               <div>
-                <h3 className={`text-base font-bold flex items-center gap-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-                  <Shield className="w-5 h-5 text-emerald-400" />
-                  <span>معايير الأمان المطبقة في جيم الديب</span>
+                <h3 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  حماية بيانات جيم الديب
                 </h3>
                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  الالتزام التام بقواعد Supabase RLS وعدم استخدام أي مفاتيح سرية في جهة العميل.
+                  بيانات كل جيم منفصلة عن التاني.
                 </p>
               </div>
-              <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30 font-bold">
-                Zero Client Escalation
-              </span>
             </div>
-
-            <div className="space-y-4">
-              <div className={`p-4 rounded-xl border space-y-2 ${
-                isDark ? 'bg-[#080C14] border-[#1E2B45]' : 'bg-slate-50 border-slate-200'
-              }`}>
-                <h4 className="font-bold text-sm text-[#D4AF37] flex items-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  <span>دورة التحقق عبر Edge Function (join-gym):</span>
-                </h4>
-                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  يتم استدعاء الرابط التالي عند إدخال كود الدعوة:
-                  <br />
-                  <code className={`px-2 py-0.5 rounded text-[#D4AF37] font-mono text-[11px] inline-block my-1 ${isDark ? 'bg-[#0F1626]' : 'bg-white border border-slate-200'}`}>
-                    POST https://rpwcjfayhdwbsnecomnk.supabase.co/functions/v1/join-gym
-                  </code>
-                  <br />
-                  مع الترويسة: <code className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${isDark ? 'bg-[#0F1626] text-slate-300' : 'bg-white text-slate-700 border border-slate-200'}`}>Authorization: Bearer &lt;access_token&gt;</code>
-                  <br />
-                  وجسم الطلب: <code className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${isDark ? 'bg-[#0F1626] text-slate-300' : 'bg-white text-slate-700 border border-slate-200'}`}>{"{ \"full_name\": \"...\", \"invite_code\": \"...\" }"}</code>
-                </p>
-                <div className={`text-[11px] pt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  تقوم الدالة السحابية بالتحقق من جدول <code className="text-[#D4AF37]">gym_invites</code>، والتأكد من عدم انتهاء الصلاحية أو تجاوز <code className="text-[#D4AF37]">max_uses</code>، ثم تقوم بربط المستخدم بالجيم ومنحه صلاحيات المالك المشترك أو المدرب في جدول <code className="text-[#D4AF37]">profiles</code> على السيرفر مباشرة.
-                </div>
-              </div>
-
-              <div className={`p-4 rounded-xl border space-y-2 ${
-                isDark ? 'bg-[#080C14] border-[#1E2B45]' : 'bg-slate-50 border-slate-200'
-              }`}>
-                <h4 className={`font-bold text-sm flex items-center gap-2 ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
-                  <Building2 className="w-4 h-4 text-emerald-400" />
-                  <span>قواعد RLS وعزل البيانات:</span>
-                </h4>
-                <ul className={`text-xs space-y-1.5 list-disc list-inside ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  <li>المدرب والمالك لا يمكنهم رؤية بيانات إلا الجيم الخاص بهم (<code className="text-[#D4AF37]">gym_id</code>).</li>
-                  <li>تعديل البروفايل من جهة العميل مقتصر حصراً على الاسم الكامل (<code className="text-[#D4AF37]">full_name</code>).</li>
-                  <li>العميل ممنوع تماماً من تعديل <code className="text-[#D4AF37]">role</code> أو <code className="text-[#D4AF37]">gym_id</code>.</li>
-                  <li>التسجيل الجديد لا يمنح أي مستخدم رتبة مالك تلقائياً.</li>
-                </ul>
-              </div>
+            <div className={`p-4 rounded-xl border space-y-2 ${ 
+              isDark ? 'bg-[#080C14] border-[#1E2B45]' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <h4 className={`font-bold text-sm ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
+                كل حساب ليه بياناته الخاصة
+              </h4>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                كل شخص بيشوف بيانات الجيم اللي انضم له بس، ومش بيقدر يشوف بيانات جيم تاني.
+              </p>
+            </div>
+            <div className={`p-4 rounded-xl border space-y-2 ${ 
+              isDark ? 'bg-[#080C14] border-[#1E2B45]' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <h4 className={`font-bold text-sm ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
+                الانضمام للجيم
+              </h4>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                استخدم كود الدعوة اللي وصلك من الإدارة عشان حسابك يرتبط بالجيم الصح.
+              </p>
             </div>
           </div>
         )}
+
       </main>
 
       {/* Footer */}
