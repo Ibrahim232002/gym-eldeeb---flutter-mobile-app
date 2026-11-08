@@ -67,7 +67,7 @@ class DuplicateMemberExceptionWithCleanup extends DuplicateMemberException {
 
   @override
   String toString() =>
-      '${super.toString()} تعذر حذف الصورة غير المرتبطة: $cleanupError';
+      '${super.toString()} وتعذر حذف الصورة المؤقتة. جرّب مرة تانية من غير صورة.';
 }
 
 class MembershipCreationGuard {
