@@ -3996,24 +3996,9 @@ export default function App() {
                             />
                           </div>
 
-                          <div className={`space-y-1.5 p-2 rounded-xl border text-xs ${
-                            isDark ? 'bg-[#080C14] border-[#1E2B45]' : 'bg-slate-50 border-slate-200'
-                          }`}>
-                            <div className="flex justify-between items-center text-[11px]">
-                              <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>رتبة الحساب (Role):</span>
-                              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 font-bold flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5" />
-                                <span>{profile?.role === 'owner' ? 'مالك (Owner)' : 'مدرب (Coach)'}</span>
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center text-[11px]">
-                              <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>معرف الجيم (Gym ID):</span>
-                              <span className="font-mono text-[10px] text-slate-500 truncate max-w-[130px]">{profile?.gym_id || 'غير متوفر'}</span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 pt-1">
-                              * رتبة الحساب ومعرف الجيم ثابتة ومحمية من قبل نظام Supabase RLS.
-                            </p>
-                          </div>
+                          <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                            تقدر تغيّر اسمك من هنا. باقي بيانات حسابك بتتحدد وقت الانضمام للجيم.
+                          </p>
 
                           <div className={`flex gap-2 pt-2 border-t ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
                             <button
