@@ -1230,7 +1230,7 @@ export default function App() {
                 }`}
               >
                 <Smartphone className="w-3.5 h-3.5" />
-                <span>المحاكي المباشر (Simulator)</span>
+                <span>معاينة التطبيق</span>
               </button>
               <button
                 onClick={() => setActiveTab('code')}
@@ -1252,7 +1252,7 @@ export default function App() {
                 }`}
               >
                 <Shield className="w-3.5 h-3.5" />
-                <span>ضوابط RLS والأمان</span>
+                <span>حماية البيانات</span>
               </button>
             </div>
           </div>
@@ -1270,7 +1270,7 @@ export default function App() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className={`font-bold text-sm flex items-center gap-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>متطلبات المصادقة والـ Backend:</span>
+                    <span>مميزات التطبيق:</span>
                   </h3>
                   <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
                     مكتمل
@@ -1295,7 +1295,7 @@ export default function App() {
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><b>شاشة Join Gym والـ Edge Function:</b> استدعاء <code className="text-[#D4AF37] font-mono text-[10px]">join-gym</code> السحابية للتحقق من كود الدعوة.</span>
+                    <span><b>الانضمام للجيم:</b> اكتب كود الدعوة اللي وصلك من الإدارة عشان تبدأ.</span>
                   </li>
                 </ul>
               </div>
@@ -1305,7 +1305,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <h3 className={`font-bold text-sm flex items-center gap-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
                     <KeyRound className="w-4 h-4 text-[#D4AF37]" />
-                    <span>حالة جلسة Supabase الحالية</span>
+                    <span>حالة تسجيل الدخول</span>
                   </h3>
                   <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold ${
                     currentUser ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600'
@@ -1432,7 +1432,7 @@ export default function App() {
                 {!isOnline && (
                   <div className="bg-rose-600 text-white text-[11px] py-1 px-3 text-center flex items-center justify-center gap-1.5 font-bold animate-fadeIn">
                     <WifiOff className="w-3 h-3" />
-                    <span>وضع من غير إنترنت (غير متصل) - يتم حفظ التغييرات محلياً</span>
+                    <span>الإنترنت مش متاح دلوقتي. تغييراتك هتتحفظ لحد ما الاتصال يرجع.</span>
                   </div>
                 )}
 
@@ -1451,7 +1451,7 @@ export default function App() {
                         GYM ELDEEB • نظام إدارة الصالة الرياضية
                       </p>
                       <div className="w-7 h-7 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin mb-3" />
-                      <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>جارٍ التحقق من جلسة Supabase...</p>
+                      <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>بنجهّز التطبيق...</p>
                     </div>
                   )}
 
@@ -3935,14 +3935,6 @@ export default function App() {
                                 isDark ? 'bg-[#080C14] border-[#1E2B45] text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'
                               }`}
                             />
-                          </div>
-
-                          <div className={`p-2 rounded-xl border text-[10px] space-y-1 ${
-                            isDark ? 'bg-[#080C14] border-[#1E2B45] text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}>
-                            <div className="text-[#D4AF37] font-bold">تنبيه مخطط قاعدة البيانات (Schema):</div>
-                            <div>• جدول gyms لا يحتوي على حقل للعنوان في المخطط الحالي، تم الالتزام بالمخطط.</div>
-                            <div>• معرف الصالة gym_id ورتب الحسابات محمية ولا يمكن تعديلها.</div>
                           </div>
 
                           <div className={`flex gap-2 pt-2 border-t ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
