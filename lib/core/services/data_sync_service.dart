@@ -406,7 +406,7 @@ class DataSyncService extends ChangeNotifier {
 
   void _setInitialLoadError(Object error) {
     _syncStatus = SyncStatus.error;
-    _syncErrorMessage = error.toString().replaceAll('Exception: ', '');
+    _syncErrorMessage = 'مش قادرين نجهّز بيانات الجيم دلوقتي. اتأكد من الإنترنت وجرب تاني.';
     notifyListeners();
   }
 
