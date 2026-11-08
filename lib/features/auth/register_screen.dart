@@ -30,6 +30,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscureConfirmPassword = true;
   String? _localErrorMessage;
   bool _emailConfirmationPending = false;
+  bool _accountAlreadyRegistered = false;
 
   @override
   void dispose() {
@@ -44,6 +45,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     setState(() {
       _localErrorMessage = null;
       _emailConfirmationPending = false;
+      _accountAlreadyRegistered = false;
     });
 
     if (!_formKey.currentState!.validate()) return;
@@ -74,6 +76,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
+    if (result == SignUpOutcome.alreadyRegistered) {
+      setState(() => _accountAlreadyRegistered = true);
+      showTopSnackBar(
+        context,
+        SnackBar(
+          content: const Text(
+            'الإيميل ده متسجل عندنا بالفعل. سجّل دخولك بنفس الإيميل وكلمة المرور.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: context.appPalette.primary,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
+
     if (result == SignUpOutcome.emailConfirmationRequired) {
       setState(() => _emailConfirmationPending = true);
       showTopSnackBar(
@@ -93,7 +113,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
 
     final error = ref.read(authNotifierProvider).errorMessage ??
-        'فشل إنشاء الحساب، يرجى المحاولة لاحقاً';
+        'حصلت مشكلة وإحنا بنعمل الحساب. جرّب تاني بعد شوية.';
     setState(() => _localErrorMessage = error);
 
     showTopSnackBar(
@@ -132,17 +152,46 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   const BrandLogo(size: 64, showSubtitle: false),
                   const SizedBox(height: 24),
                   Text(
-                    'انضم إلى كادر إدارة جيم الديب',
+                    'اعمل حساب جديد عشان تنضم لفريق جيم الديب',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'قم بإنشاء حسابك ثم اربطه بالجيم بواسطة رمز الدعوة الآمن',
+                    'اعمل حسابك الأول، وبعدها اكتب كود الدعوة اللي وصلك من إدارة الجيم.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 24),
+
+                  if (_accountAlreadyRegistered) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: context.appPalette.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: context.appPalette.primary.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'الإيميل ده متسجل عندنا بالفعل. بدل ما تعمل حساب جديد، سجّل دخولك بنفس الإيميل وكلمة المرور.',
+                            textDirection: TextDirection.rtl,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () => context.go('/login'),
+                            child: const Text('روح لتسجيل الدخول'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
 
                   // Successful signup that is waiting for email verification.
                   if (_emailConfirmationPending) ...[
@@ -165,7 +214,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'الحساب اتعمل بالفعل. افتح رسالة التأكيد في بريدك الإلكتروني واضغط على رابط التأكيد، وبعدها ارجع وسجّل الدخول بنفس البريد وكلمة المرور لإدخال كود الجيم.',
+                              'الحساب اتعمل! افتح رسالة التأكيد اللي وصلتك على الإيميل واضغط على الرابط، وبعدها ارجع سجّل دخولك عشان تدخل كود الجيم.',
                               textDirection: TextDirection.rtl,
                               style: TextStyle(
                                 color: context.appPalette.textPrimary,
@@ -217,13 +266,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     label: 'الاسم الكامل',
                     hint: 'كابتن أحمد الديب',
                     prefixIcon: Icons.person_outline_rounded,
-                    readOnly: isLoading || _emailConfirmationPending,
+                    readOnly: isLoading || _emailConfirmationPending || _accountAlreadyRegistered,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
-                        return 'يرجى إدخال الاسم بالكامل';
+                        return 'اكتب اسمك بالكامل';
                       }
                       if (val.trim().length < 3) {
-                        return 'الاسم يجب ألا يقل عن 3 أحرف';
+                        return 'الاسم لازم يكون 3 حروف على الأقل';
                       }
                       return null;
                     },
@@ -237,13 +286,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     hint: 'coach@gymeldeeb.com',
                     prefixIcon: Icons.email_outlined,
                     keyboardType: TextInputType.emailAddress,
-                    readOnly: isLoading || _emailConfirmationPending,
+                    readOnly: isLoading || _emailConfirmationPending || _accountAlreadyRegistered,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
-                        return 'يرجى إدخال البريد الإلكتروني';
+                        return 'اكتب بريدك الإلكتروني';
                       }
                       if (!val.contains('@') || !val.contains('.')) {
-                        return 'صيغة البريد الإلكتروني غير صحيحة';
+                        return 'البريد الإلكتروني شكله مش صحيح';
                       }
                       return null;
                     },
@@ -257,7 +306,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     hint: '••••••••',
                     prefixIcon: Icons.lock_outline_rounded,
                     obscureText: _obscurePassword,
-                    readOnly: isLoading || _emailConfirmationPending,
+                    readOnly: isLoading || _emailConfirmationPending || _accountAlreadyRegistered,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -273,10 +322,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     validator: (val) {
                       if (val == null || val.isEmpty) {
-                        return 'يرجى إدخال كلمة المرور';
+                        return 'اكتب كلمة المرور';
                       }
                       if (val.length < 6) {
-                        return 'كلمة المرور يجب أن لا تقل عن 6 أحرف';
+                        return 'كلمة المرور لازم تكون 6 أحرف على الأقل';
                       }
                       return null;
                     },
@@ -290,7 +339,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     hint: '••••••••',
                     prefixIcon: Icons.lock_clock_outlined,
                     obscureText: _obscureConfirmPassword,
-                    readOnly: isLoading || _emailConfirmationPending,
+                    readOnly: isLoading || _emailConfirmationPending || _accountAlreadyRegistered,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword
@@ -306,10 +355,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     validator: (val) {
                       if (val == null || val.isEmpty) {
-                        return 'يرجى تأكيد كلمة المرور';
+                        return 'أكد كلمة المرور';
                       }
                       if (val != _passwordController.text) {
-                        return 'كلمتا المرور غير متطابقتين';
+                        return 'كلمتا المرور مش متطابقتين';
                       }
                       return null;
                     },
@@ -321,7 +370,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     text: 'إنشاء الحساب والمتابعة',
                     icon: Icons.person_add_alt_1_rounded,
                     isLoading: isLoading,
-                    onPressed: _emailConfirmationPending ? null : _handleRegister,
+                    onPressed: (_emailConfirmationPending || _accountAlreadyRegistered) ? null : _handleRegister,
                   ),
                   const SizedBox(height: 16),
 
