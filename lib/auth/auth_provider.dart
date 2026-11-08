@@ -99,22 +99,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Real Sign Up with Email, Password & Full Name
+  /// Real Sign Up with Email, Password & Full Name.
   ///
-  /// After successful signup, user is routed to Join Gym flow.
-  Future<bool> signUp(String email, String password, String fullName) async {
+  /// Users with email confirmation enabled must confirm and sign in before joining a gym.
+  Future<SignUpOutcome> signUp(
+    String email,
+    String password,
+    String fullName,
+  ) async {
     state = AuthState.loading();
     try {
-      await _repository.signUp(
+      final hasSession = await _repository.signUp(
         email: email,
         password: password,
         fullName: fullName,
       );
+
+      if (!hasSession) {
+        state = AuthState.unauthenticated();
+        return SignUpOutcome.emailConfirmationRequired;
+      }
+
       await refreshUserSession();
-      return state.isAuthenticated;
+      return state.isAuthenticated
+          ? SignUpOutcome.signedIn
+          : SignUpOutcome.failed;
     } catch (e) {
       state = AuthState.unauthenticated(_cleanError(e));
-      return false;
+      return SignUpOutcome.failed;
     }
   }
 
