@@ -2675,11 +2675,11 @@ export default function App() {
 
                             <div className="space-y-1.5 text-xs">
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>اسم الصالة (العربي):</span>
+                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>اسم الجيم:</span>
                                 <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{gym?.name || 'جيم الديب'}</span>
                               </div>
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>اسم الصالة (English):</span>
+                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>اسم الجيم بالإنجليزي:</span>
                                 <span className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>Gym ElDeeb</span>
                               </div>
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
@@ -2687,7 +2687,7 @@ export default function App() {
                                 <span className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{gym?.phone || 'غير مسجل'}</span>
                               </div>
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>العملة المعتمدة:</span>
+                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>العملة:</span>
                                 <span className="font-bold text-[#D4AF37]">{gym?.currency || 'EGP'}</span>
                               </div>
                             </div>
@@ -2699,7 +2699,7 @@ export default function App() {
                             <div className={`flex items-center justify-between pb-2 border-b ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
                               <div className="flex items-center gap-2">
                                 <UserIcon className="w-4 h-4 text-emerald-400" />
-                                <h4 className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>الملف الشخصي للكابتن (My Profile)</h4>
+                                <h4 className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>حسابي</h4>
                               </div>
                               <button
                                 type="button"
@@ -2717,23 +2717,19 @@ export default function App() {
 
                             <div className="space-y-1.5 text-xs">
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>الاسم الكامل:</span>
+                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>اسمك:</span>
                                 <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{profile?.full_name || 'كابتن الصالة'}</span>
                               </div>
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>البريد الإلكتروني:</span>
+                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>الإيميل:</span>
                                 <span className={`font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{currentUser?.email || session?.user?.email || 'غير متوفر'}</span>
                               </div>
                               <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'} items-center`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>الرتبة / الصلاحية:</span>
+                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>نوع الحساب:</span>
                                 <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 font-bold border border-amber-500/20 flex items-center gap-1">
                                   <Lock className="w-2.5 h-2.5" />
-                                  <span>{profile?.role === 'owner' ? 'مالك الصالة الرياضية (Owner)' : 'مدرب معتمد (Coach)'}</span>
+                                  <span>{profile?.role === 'owner' ? 'مسؤول الجيم' : 'عضو في فريق الجيم'}</span>
                                 </span>
-                              </div>
-                              <div className="flex justify-between py-1 items-center">
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>معرف الحساب (User ID):</span>
-                                <span className="font-mono text-[10px] text-slate-500 truncate max-w-[150px]">{profile?.id || currentUser?.id || 'غير متوفر'}</span>
                               </div>
                             </div>
                           </div>
@@ -2744,7 +2740,7 @@ export default function App() {
                           }`}>
                             <div className={`flex items-center gap-2 pb-2 border-b ${isDark ? 'border-[#1E2B45]' : 'border-slate-100'}`}>
                               <Globe className="w-4 h-4 text-sky-400" />
-                              <h4 className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>المظهر واللغة (Appearance & Language)</h4>
+                              <h4 className={`font-bold text-xs ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>المظهر واللغة</h4>
                             </div>
 
                             <div className="space-y-2 text-xs">
@@ -2816,22 +2812,15 @@ export default function App() {
                             </div>
 
                             <div className="space-y-1.5 text-xs">
-                              <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'} items-center`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>حالة الاتصال بالإنترنت:</span>
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                                  isOnline ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                                }`}>
+                              <div className={`flex justify-between py-1 items-center ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                <span>الاتصال بالإنترنت:</span>
+                                <span className={isOnline ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                                   {isOnline ? 'متصل بالإنترنت' : 'مفيش اتصال بالإنترنت'}
                                 </span>
                               </div>
-                              <div className={`flex justify-between py-1 border-b ${isDark ? 'border-[#1E2B45]/60' : 'border-slate-100'}`}>
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>الجداول المتزامنة:</span>
-                                <span className={`font-mono text-[11px] ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>members, plans, memberships, payments</span>
-                              </div>
-                              <div className="flex justify-between py-1">
-                                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>قواعد أمان RLS:</span>
-                                <span className="text-emerald-400 font-bold text-[11px]">مفعلة وصارمة لكل استعلام</span>
-                              </div>
+                              <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                تغييراتك بتتحدّث تلقائيًا لما الإنترنت يكون متاح.
+                              </p>
                             </div>
                           </div>
 
@@ -2843,7 +2832,7 @@ export default function App() {
                               className="w-full py-2.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition btn-tactile"
                             >
                               <LogOut className="w-4 h-4" />
-                              <span>تسجيل خروج آمن من الجلسة</span>
+                              <span>تسجيل الخروج</span>
                             </button>
                           </div>
                         </div>
@@ -3943,7 +3932,7 @@ export default function App() {
                           </div>
 
                           <div>
-                            <label className={`block text-[11px] font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>العملة المعتمدة</label>
+                            <label className={`block text-[11px] font-bold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>العملة</label>
                             <input
                               type="text"
                               value={editingGymInfo.currency}
