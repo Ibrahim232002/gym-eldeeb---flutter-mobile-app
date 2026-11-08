@@ -138,8 +138,6 @@ class _JoinGymScreenState extends ConsumerState<JoinGymScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  const SizedBox(height: 20),
-
                   // Error notification if join failed
                   if (_localErrorMessage != null) ...[
                     Container(
