@@ -67,7 +67,7 @@ class AuthRepository {
         throw Exception(
             'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
       }
-      throw Exception('فشل تسجيل الدخول، يرجى المحاولة لاحقاً');
+      throw Exception('حصلت مشكلة وإحنا بنحاول نسجّل دخولك. جرّب تاني بعد شوية.');
     }
   }
 
@@ -285,14 +285,18 @@ class AuthRepository {
       return 'لسه محتاج تأكد بريدك الإلكتروني. افتح رسالة التأكيد وجرب تسجّل دخول تاني.';
     }
     if (message.contains('user already registered') ||
-        message.contains('already exists')) {
+        message.contains('already exists') ||
+        message.contains('email_exists') ||
+        message.contains('email already registered')) {
       return 'الإيميل ده متسجل عندنا بالفعل. سجّل دخولك بنفس الإيميل بدل ما تعمل حساب جديد.';
     }
     if (message.contains('password') && message.contains('least')) {
       return 'كلمة المرور لازم تكون 6 حروف على الأقل.';
     }
     if (message.contains('rate limit') ||
-        message.contains('too many requests')) {
+        message.contains('too many requests') ||
+        message.contains('for security purposes') ||
+        message.contains('only request this after')) {
       return 'حاولت كذا مرة ورا بعض. استنى شوية وجرب تاني.';
     }
     if (message.contains('network') || message.contains('connection')) {
