@@ -59,7 +59,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const FLUTTER_FILES: Record<string, { category: string; description: string; code: string }> = {
   'lib/auth/auth_repository.dart': {
     category: 'Auth (Phase 2)',
-    description: 'Real Supabase Auth repository: Email/Password sign-in & sign-up, session persistence, clean Arabic errors, strict RLS enforcement, and Edge Function invocation with Bearer token.',
+    description: 'ملف مسؤول عن إنشاء الحسابات وتسجيل الدخول وربط كل حساب بالجيم الخاص بيه.',
     code: `import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/constants/supabase_constants.dart';
 import '../data/models/user_profile.dart';
@@ -110,7 +110,7 @@ class AuthRepository {
   },
   'lib/auth/auth_provider.dart': {
     category: 'State (Phase 2)',
-    description: 'Riverpod StateNotifier managing persistent Supabase Auth state, automatic session restoration, and gym linkage resolution.',
+    description: 'متابعة حالة تسجيل الدخول واسترجاع الحساب لما التطبيق يفتح.',
     code: `class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repository;
   AuthNotifier(this._repository) : super(AuthState.initial()) {
@@ -152,12 +152,12 @@ class AuthRepository {
   },
   'lib/features/gym/join_gym_screen.dart': {
     category: 'UI (Phase 2)',
-    description: 'Join Gym screen collecting Full Name and Invite Code, calling https://rpwcjfayhdwbsnecomnk.supabase.co/functions/v1/join-gym.',
+    description: 'الشاشة اللي المستخدم بيكتب فيها اسمه وكود الدعوة عشان ينضم للجيم.',
     code: `// Sends {"full_name": ..., "invite_code": ...} to join-gym Edge Function with Authorization Bearer header`
   },
   'pubspec.yaml': {
     category: 'Config',
-    description: 'Flutter dependencies with supabase_flutter, flutter_riverpod, go_router, connectivity_plus, shared_preferences, and Google Fonts.',
+    description: 'المكتبات اللي التطبيق بيستخدمها علشان يشتغل وينظّم التنقل ويحفظ بياناته.',
     code: `name: gym_eldeeb
 description: "Gym ElDeeb - Production Arabic-first Gym Management Flutter App"
 dependencies:
@@ -1786,7 +1786,7 @@ export default function App() {
                               : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                           }`}>
                             {isOnline ? <Wifi className="w-3 h-3 text-emerald-400" /> : <WifiOff className="w-3 h-3 text-rose-400" />}
-                            <span>{isOnline ? 'متصل' : 'أوفلاين'}</span>
+                            <span>{isOnline ? 'متصل بالإنترنت' : 'من غير إنترنت'}</span>
                           </div>
 
                           {/* Coach Profile Avatar Chip */}
