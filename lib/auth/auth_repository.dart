@@ -77,7 +77,8 @@ class AuthRepository {
   /// - Client NEVER selects or modifies `role` or `gym_id`.
   /// - Only `full_name` is passed in user_metadata; no database profile is created here.
   /// - User remains unassociated with any gym until redeeming an invite code via the Edge Function.
-  Future<void> signUp({
+  /// Returns true when Supabase created an active session; false when email confirmation is pending.
+  Future<bool> signUp({
     required String email,
     required String password,
     required String fullName,
@@ -93,11 +94,17 @@ class AuthRepository {
         data: {'full_name': cleanName},
       );
 
+      if (response.user == null) {
+        throw Exception('لم يؤكد خادم المصادقة إنشاء الحساب، يرجى المحاولة لاحقاً');
+      }
+
       // Do not create a placeholder row in public.profiles here.
       // The secure join-gym flow calls claim_gym_invite, which creates the
       // profile and assigns gym_id/role atomically after validating the invite.
       // Keeping profiles absent until invite redemption also prevents
       // claim_gym_invite from rejecting this newly registered user.
+      // With Confirm Email enabled, Supabase returns a user but no session.
+      return response.session != null;
     } on AuthException catch (e) {
       throw Exception(_mapAuthExceptionToArabic(e));
     } catch (e) {
