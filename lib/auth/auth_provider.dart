@@ -109,15 +109,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   ) async {
     state = AuthState.loading();
     try {
-      final hasSession = await _repository.signUp(
+      final outcome = await _repository.signUp(
         email: email,
         password: password,
         fullName: fullName,
       );
 
-      if (!hasSession) {
-        state = AuthState.unauthenticated();
-        return SignUpOutcome.emailConfirmationRequired;
+      if (outcome != SignUpOutcome.signedIn) {
+        state = AuthState.unauthenticated(
+          outcome == SignUpOutcome.alreadyRegistered
+              ? 'الإيميل ده متسجل عندنا بالفعل. سجّل دخولك.'
+              : null,
+        );
+        return outcome;
       }
 
       await refreshUserSession();
