@@ -2,6 +2,13 @@ import '../data/models/user_profile.dart';
 import '../data/models/gym.dart';
 
 /// Status of the current user session
+/// Result of registering when email confirmation may be required.
+enum SignUpOutcome {
+  signedIn,
+  emailConfirmationRequired,
+  failed,
+}
+
 enum AuthStatus {
   initial,
   loading,
