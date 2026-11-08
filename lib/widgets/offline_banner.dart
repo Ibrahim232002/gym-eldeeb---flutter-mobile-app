@@ -28,7 +28,7 @@ class OfflineBanner extends ConsumerWidget {
                 ),
                 SizedBox(width: 8),
                 Text(
-                  'وضع غير متصل بالإنترنت - يتم حفظ التغييرات محلياً',
+                  'الإنترنت مش متاح دلوقتي. تغييراتك هتتحفظ وهتتحدّث لما الاتصال يرجع.',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,
