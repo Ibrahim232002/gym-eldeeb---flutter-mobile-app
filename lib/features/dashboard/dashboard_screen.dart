@@ -250,7 +250,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   Icon(Icons.wifi_off_rounded,
                       color: context.appPalette.error, size: 18),
                   const SizedBox(width: 4),
-                  Text('أوفلاين',
+                  Text('من غير إنترنت',
                       style: TextStyle(
                           color: context.appPalette.error,
                           fontSize: 11,
@@ -477,7 +477,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'فيه بيانات لسه متسجلتش على الحساب. هنحاول تاني لما الاتصال يستقر.',
+                      'فيه تغييرات لسه ما اتحدّثتش. هنحاول تاني أول ما الاتصال يرجع.',
                       style: TextStyle(
                           color: context.appPalette.error, fontSize: 13),
                     ),
@@ -4184,9 +4184,9 @@ class _SettingsTab extends ConsumerWidget {
 
                 final state = ref.read(dataSyncServiceProvider);
                 final message = state.syncStatus == SyncStatus.synced
-                    ? 'تمت مزامنة البيانات بنجاح.'
+                    ? 'كل البيانات اتحدّثت بنجاح.'
                     : (state.syncErrorMessage ??
-                        'تعذرت المزامنة، راجع البيانات أو الصلاحيات.');
+                        'مش قادرين نحدّث البيانات دلوقتي. اتأكد من الإنترنت وجرب تاني.');
                 showTopSnackBar(context, 
                   SnackBar(
                     content: Text(message, textDirection: ui.TextDirection.rtl),
@@ -4197,7 +4197,7 @@ class _SettingsTab extends ConsumerWidget {
                 );
               },
               icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('مزامنة فورية'),
+              label: const Text('حدّث البيانات دلوقتي'),
             ),
           ),
           const SizedBox(height: 8),
@@ -4211,15 +4211,15 @@ class _SettingsTab extends ConsumerWidget {
                       context,
                       'الاتصال بالإنترنت',
                       syncService.isOffline
-                          ? 'غير متصل (Offline)'
-                          : 'متصل بالشبكة (Online)'),
+                          ? 'مفيش اتصال بالإنترنت'
+                          : 'متصل بالإنترنت'),
                   const Divider(),
                   _buildSettingRow(
                       context,
                       'حالة تحديث البيانات',
                       syncService.syncStatus == SyncStatus.synced
-                          ? 'مكتملة ومؤمنة (Synced)'
-                          : 'في انتظار التحديث / جاري التحديث'),
+                          ? 'كل البيانات محدثة'
+                          : 'فيه بيانات لسه بتتحدّث'),
                 ],
               ),
             ),
@@ -4231,7 +4231,7 @@ class _SettingsTab extends ConsumerWidget {
                 foregroundColor: Colors.white),
             onPressed: () => _confirmLogout(context, ref),
             icon: const Icon(Icons.logout_rounded),
-            label: const Text('تسجيل خروج آمن من الجلسة'),
+            label: const Text('تسجيل الخروج'),
           ),
         ],
       ),
@@ -4303,7 +4303,7 @@ class _SettingsTab extends ConsumerWidget {
           backgroundColor: context.appPalette.surfaceCard,
           title: const Text('تسجيل الخروج'),
           content: const Text(
-              'هل تريد تأكيد تسجيل الخروج من جيم الديب ومسح بيانات الجلسة محلياً؟'),
+              'متأكد إنك عايز تسجّل خروج من جيم الديب؟'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -4512,7 +4512,7 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'الرتبة (${widget.profile?.role ?? "coach"}) ومعرف الجيم محمية بقواعد الأمان RLS ولا يمكن تعديلها.',
+                  'تقدر تغيّر اسمك من هنا. بيانات ربط حسابك بالجيم بتتحدد وقت الانضمام.',
                   style: TextStyle(
                       fontSize: 10, color: context.appPalette.textMuted),
                 ),
