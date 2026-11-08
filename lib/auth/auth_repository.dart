@@ -77,8 +77,8 @@ class AuthRepository {
   /// - Client NEVER selects or modifies `role` or `gym_id`.
   /// - Only `full_name` is passed in user_metadata; no database profile is created here.
   /// - User remains unassociated with any gym until redeeming an invite code via the Edge Function.
-  /// Returns true when Supabase created an active session; false when email confirmation is pending.
-  Future<bool> signUp({
+  /// Reports whether signup created a new account, needs email confirmation, or found an existing account.
+  Future<app_auth.SignUpOutcome> signUp({
     required String email,
     required String password,
     required String fullName,
@@ -94,8 +94,16 @@ class AuthRepository {
         data: {'full_name': cleanName},
       );
 
-      if (response.user == null) {
-        throw Exception('لم يؤكد خادم المصادقة إنشاء الحساب، يرجى المحاولة لاحقاً');
+      final user = response.user;
+      if (user == null) {
+        throw Exception('حصلت مشكلة وإحنا بنعمل الحساب. جرّب تاني بعد شوية.');
+      }
+
+      // Supabase hides whether a confirmed account exists when email
+      // confirmation is enabled. An empty identities list identifies that
+      // obfuscated "already registered" response; no new account was created.
+      if (user.identities?.isEmpty == true) {
+        return app_auth.SignUpOutcome.alreadyRegistered;
       }
 
       // Do not create a placeholder row in public.profiles here.
@@ -103,8 +111,10 @@ class AuthRepository {
       // profile and assigns gym_id/role atomically after validating the invite.
       // Keeping profiles absent until invite redemption also prevents
       // claim_gym_invite from rejecting this newly registered user.
-      // With Confirm Email enabled, Supabase returns a user but no session.
-      return response.session != null;
+      // With Confirm Email enabled, a new user is returned without a session.
+      return response.session != null
+          ? app_auth.SignUpOutcome.signedIn
+          : app_auth.SignUpOutcome.emailConfirmationRequired;
     } on AuthException catch (e) {
       throw Exception(_mapAuthExceptionToArabic(e));
     } catch (e) {
@@ -113,7 +123,7 @@ class AuthRepository {
         throw Exception(
             'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
       }
-      throw Exception('فشل إنشاء الحساب، يرجى المحاولة مرة أخرى');
+      throw Exception('حصلت مشكلة وإحنا بنعمل الحساب. جرّب تاني بعد شوية.');
     }
   }
 
@@ -200,23 +210,23 @@ class AuthRepository {
   }) async {
     final isOnline = await _networkInfo.isConnected;
     if (!isOnline) {
-      throw Exception('لا يمكن الانضمام للجيم أثناء عدم الاتصال بالإنترنت');
+      throw Exception('لازم تكون متصل بالإنترنت عشان تنضم للجيم. جرّب تاني لما الاتصال يرجع.');
     }
 
     final code = inviteCode.trim();
     final name = fullName.trim();
 
     if (name.isEmpty) {
-      throw Exception('يرجى إدخال الاسم بالكامل');
+      throw Exception('اكتب اسمك بالكامل.');
     }
     if (code.isEmpty) {
-      throw Exception('يرجى إدخال رمز دعوة صحيح');
+      throw Exception('اكتب كود الدعوة اللي وصلك من الجيم.');
     }
 
     final session = currentSession;
     final accessToken = session?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
-      throw Exception('جلسة المستخدم غير صالحة، يرجى تسجيل الدخول مجدداً');
+      throw Exception('سجّل دخولك تاني وجرب.');
     }
 
     // Call the existing Edge Function with Authorization header and payload
@@ -233,27 +243,27 @@ class AuthRepository {
 
     if (response.status != 200) {
       String errorMessage =
-          'تعذر الانضمام للجيم، يرجى التحقق من صحة رمز الدعوة';
+          'حصلت مشكلة وإحنا بنحاول نضمّك للجيم. راجع كود الدعوة وجرب تاني.';
       if (response.data is Map) {
         final data = response.data as Map<String, dynamic>;
         if (data['error'] != null) {
           final raw = data['error'].toString();
           final lower = raw.toLowerCase();
           if (lower.contains('invalid') || lower.contains('not found')) {
-            errorMessage = 'رمز الدعوة غير صحيح أو غير موجود';
+            errorMessage = 'كود الدعوة مش صحيح. اتأكد إنك كتبته زي ما وصلك.';
           } else if (lower.contains('expire')) {
-            errorMessage = 'رمز الدعوة منتهي الصلاحية';
+            errorMessage = 'كود الدعوة انتهت صلاحيته. اطلب كود جديد من إدارة الجيم.';
           } else if (lower.contains('max') ||
               lower.contains('limit') ||
               lower.contains('used')) {
-            errorMessage = 'تم استنفاد الحد الأقصى لاستخدام رمز الدعوة هذا';
+            errorMessage = 'كود الدعوة وصل للعدد المسموح. اطلب كود جديد من إدارة الجيم.';
           } else if (lower.contains('already')) {
-            errorMessage = 'هذا الحساب مرتبط بالفعل بصالة جيم';
+            errorMessage = 'الحساب ده مربوط بجيم بالفعل. لو محتاج مساعدة، كلم إدارة الجيم.';
           } else {
-            errorMessage = raw;
+            errorMessage = 'حصلت مشكلة وإحنا بنحاول نضمّك للجيم. جرّب تاني بعد شوية.';
           }
         } else if (data['message'] != null) {
-          errorMessage = data['message'].toString();
+          errorMessage = 'حصلت مشكلة وإحنا بنحاول نضمّك للجيم. جرّب تاني بعد شوية.';
         }
       }
       throw Exception(errorMessage);
@@ -269,27 +279,25 @@ class AuthRepository {
         message.contains('invalid_credentials') ||
         message.contains('invalid-credential') ||
         code == '400' && message.contains('credential')) {
-      return 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+      return 'الإيميل أو كلمة المرور مش صح. راجعهم وجرب تاني.';
     }
     if (message.contains('email not confirmed')) {
-      return 'يرجى تأكيد بريدك الإلكتروني لتتمكن من تسجيل الدخول';
+      return 'لسه محتاج تأكد بريدك الإلكتروني. افتح رسالة التأكيد وجرب تسجّل دخول تاني.';
     }
     if (message.contains('user already registered') ||
         message.contains('already exists')) {
-      return 'هذا البريد الإلكتروني مسجل بالفعل، يرجى تسجيل الدخول';
+      return 'الإيميل ده متسجل عندنا بالفعل. سجّل دخولك بنفس الإيميل بدل ما تعمل حساب جديد.';
     }
     if (message.contains('password') && message.contains('least')) {
-      return 'كلمة المرور يجب أن لا تقل عن 6 أحرف';
+      return 'كلمة المرور لازم تكون 6 حروف على الأقل.';
     }
     if (message.contains('rate limit') ||
         message.contains('too many requests')) {
-      return 'تم تجاوز الحد المسموح من المحاولات، يرجى الانتظار قليلاً';
+      return 'حاولت كذا مرة ورا بعض. استنى شوية وجرب تاني.';
     }
     if (message.contains('network') || message.contains('connection')) {
-      return 'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت';
+      return 'مش قادرين نتصل دلوقتي. اتأكد من الإنترنت وجرب تاني.';
     }
-    return e.message.isNotEmpty
-        ? e.message
-        : 'حدث خطأ أثناء المصادقة، يرجى المحاولة لاحقاً';
+    return 'حصلت مشكلة وإحنا بنحاول ندخلّك. راجع بياناتك وجرب تاني.';
   }
 }
