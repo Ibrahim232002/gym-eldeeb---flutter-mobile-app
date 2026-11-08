@@ -80,7 +80,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'جارٍ التحميل ومزامنة البيانات...',
+              'بنجهّز بياناتك...',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.appPalette.textMuted,
                   ),
