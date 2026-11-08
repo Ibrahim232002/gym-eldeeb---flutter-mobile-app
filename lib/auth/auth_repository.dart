@@ -65,7 +65,7 @@ class AuthRepository {
           msg.contains('network') ||
           msg.contains('clientexception')) {
         throw Exception(
-            'تعذر الاتصال بالخادم، يرجى التحقق من اتصالك بالإنترنت');
+            'مش قادرين نتصل دلوقتي. اتأكد من الإنترنت وجرب تاني.');
       }
       throw Exception('حصلت مشكلة وإحنا بنحاول نسجّل دخولك. جرّب تاني بعد شوية.');
     }
