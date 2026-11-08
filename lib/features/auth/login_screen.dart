@@ -54,7 +54,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } else {
       final error = ref.read(authNotifierProvider).errorMessage ??
-          'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+          'الإيميل أو كلمة المرور مش صح. راجعهم وجرب تاني.';
       setState(() => _localErrorMessage = error);
 
       showTopSnackBar(context, 
@@ -99,7 +99,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'سجل دخولك لمتابعة صالة الألعاب الرياضية والاشتراكات',
+                    'سجّل دخولك عشان تتابع بيانات الجيم والاشتراكات.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -147,10 +147,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     readOnly: isLoading,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
-                        return 'يرجى إدخال البريد الإلكتروني';
+                        return 'اكتب بريدك الإلكتروني';
                       }
                       if (!val.contains('@') || !val.contains('.')) {
-                        return 'صيغة البريد الإلكتروني غير صحيحة';
+                        return 'البريد الإلكتروني شكله مش صحيح';
                       }
                       return null;
                     },
@@ -180,10 +180,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     validator: (val) {
                       if (val == null || val.isEmpty) {
-                        return 'يرجى إدخال كلمة المرور';
+                        return 'اكتب كلمة المرور';
                       }
                       if (val.length < 6) {
-                        return 'كلمة المرور يجب أن لا تقل عن 6 أحرف';
+                        return 'كلمة المرور لازم تكون 6 أحرف على الأقل';
                       }
                       return null;
                     },
@@ -205,7 +205,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'ليس لديك حساب بعد؟',
+                        'لسه معندكش حساب؟',
                         style:
                             TextStyle(color: context.appPalette.textSecondary),
                       ),
