@@ -3,6 +3,7 @@ import '../../core/utils/top_snackbar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../auth/auth_provider.dart';
+import '../../auth/auth_state.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/brand_logo.dart';
 import '../../widgets/custom_text_field.dart';
@@ -28,6 +29,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   String? _localErrorMessage;
+  bool _emailConfirmationPending = false;
 
   @override
   void dispose() {
@@ -39,11 +41,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   void _handleRegister() async {
-    setState(() => _localErrorMessage = null);
+    setState(() {
+      _localErrorMessage = null;
+      _emailConfirmationPending = false;
+    });
 
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref.read(authNotifierProvider.notifier).signUp(
+    final result = await ref.read(authNotifierProvider.notifier).signUp(
           _emailController.text.trim(),
           _passwordController.text,
           _nameController.text.trim(),
@@ -51,9 +56,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     if (!mounted) return;
 
-    if (success) {
-      // Newly registered users have no gym and proceed directly to Join Gym
-      showTopSnackBar(context, 
+    if (result == SignUpOutcome.signedIn) {
+      // Newly registered users with an active session proceed directly to Join Gym.
+      showTopSnackBar(
+        context,
         SnackBar(
           content: const Text(
             'تم إنشاء الحساب بنجاح! أدخل رمز الدعوة للانضمام لصالة الجيم.',
@@ -65,23 +71,43 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
       );
       context.go('/join-gym');
-    } else {
-      final error = ref.read(authNotifierProvider).errorMessage ??
-          'فشل إنشاء الحساب، يرجى المحاولة لاحقاً';
-      setState(() => _localErrorMessage = error);
+      return;
+    }
 
-      showTopSnackBar(context, 
+    if (result == SignUpOutcome.emailConfirmationRequired) {
+      setState(() => _emailConfirmationPending = true);
+      showTopSnackBar(
+        context,
         SnackBar(
-          content: Text(
-            error,
+          content: const Text(
+            'تم إنشاء الحساب وإرسال رسالة تأكيد إلى بريدك الإلكتروني. أكّد البريد أولاً، ثم سجّل الدخول لإدخال كود الجيم.',
             textDirection: TextDirection.rtl,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: context.appPalette.error,
+          backgroundColor: context.appPalette.success,
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 7),
         ),
       );
+      return;
     }
+
+    final error = ref.read(authNotifierProvider).errorMessage ??
+        'فشل إنشاء الحساب، يرجى المحاولة لاحقاً';
+    setState(() => _localErrorMessage = error);
+
+    showTopSnackBar(
+      context,
+      SnackBar(
+        content: Text(
+          error,
+          textDirection: TextDirection.rtl,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: context.appPalette.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -117,6 +143,41 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 24),
+
+                  // Successful signup that is waiting for email verification.
+                  if (_emailConfirmationPending) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: context.appPalette.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: context.appPalette.success.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.mark_email_read_outlined,
+                            color: context.appPalette.success,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'الحساب اتعمل بالفعل. افتح رسالة التأكيد في بريدك الإلكتروني واضغط على رابط التأكيد، وبعدها ارجع وسجّل الدخول بنفس البريد وكلمة المرور لإدخال كود الجيم.',
+                              textDirection: TextDirection.rtl,
+                              style: TextStyle(
+                                color: context.appPalette.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
 
                   // Error notification if registration failed
                   if (_localErrorMessage != null) ...[
@@ -156,7 +217,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     label: 'الاسم الكامل',
                     hint: 'كابتن أحمد الديب',
                     prefixIcon: Icons.person_outline_rounded,
-                    readOnly: isLoading,
+                    readOnly: isLoading || _emailConfirmationPending,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
                         return 'يرجى إدخال الاسم بالكامل';
@@ -260,7 +321,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     text: 'إنشاء الحساب والمتابعة',
                     icon: Icons.person_add_alt_1_rounded,
                     isLoading: isLoading,
-                    onPressed: _handleRegister,
+                    onPressed: _emailConfirmationPending ? null : _handleRegister,
                   ),
                   const SizedBox(height: 16),
 
