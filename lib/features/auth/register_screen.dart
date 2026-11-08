@@ -237,7 +237,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     hint: 'coach@gymeldeeb.com',
                     prefixIcon: Icons.email_outlined,
                     keyboardType: TextInputType.emailAddress,
-                    readOnly: isLoading,
+                    readOnly: isLoading || _emailConfirmationPending,
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
                         return 'يرجى إدخال البريد الإلكتروني';
@@ -257,7 +257,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     hint: '••••••••',
                     prefixIcon: Icons.lock_outline_rounded,
                     obscureText: _obscurePassword,
-                    readOnly: isLoading,
+                    readOnly: isLoading || _emailConfirmationPending,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -290,7 +290,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     hint: '••••••••',
                     prefixIcon: Icons.lock_clock_outlined,
                     obscureText: _obscureConfirmPassword,
-                    readOnly: isLoading,
+                    readOnly: isLoading || _emailConfirmationPending,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword
