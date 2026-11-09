@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../auth/auth_provider.dart';
 import '../../auth/auth_state.dart';
 import '../../core/theme/app_colors.dart';
-import '../../widgets/brand_logo.dart';
 
 /// Splash Screen initializing session and redirecting user
 class SplashScreen extends ConsumerStatefulWidget {
@@ -67,7 +66,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const BrandLogo(size: 96),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Image.asset(
+                'assets/images/app_icon.png',
+                width: 132,
+                height: 132,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
             const SizedBox(height: 48),
             SizedBox(
               width: 32,
