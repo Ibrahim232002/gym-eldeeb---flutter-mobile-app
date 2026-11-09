@@ -16,6 +16,24 @@ class GymClock {
     return DateTime.utc(cairo.year, cairo.month, cairo.day);
   }
 
+  /// Returns the current Cairo calendar month as a half-open UTC interval.
+  /// Use this for timestamp filters so DST changes do not shift month boundaries.
+  static ({DateTime startUtc, DateTime endUtc}) currentMonthUtcRange(
+      [DateTime? instant]) {
+    final cairo = tz.TZDateTime.from(instant ?? DateTime.now(), _cairo);
+    final start = tz.TZDateTime(_cairo, cairo.year, cairo.month, 1);
+    final end = tz.TZDateTime(_cairo, cairo.year, cairo.month + 1, 1);
+    return (startUtc: start.toUtc(), endUtc: end.toUtc());
+  }
+
+  static bool isInCurrentMonth(DateTime value, [DateTime? reference]) {
+    final cairoValue = tz.TZDateTime.from(value, _cairo);
+    final cairoReference =
+        tz.TZDateTime.from(reference ?? DateTime.now(), _cairo);
+    return cairoValue.year == cairoReference.year &&
+        cairoValue.month == cairoReference.month;
+  }
+
   static Duration untilNextDay([DateTime? instant]) {
     final now = instant ?? DateTime.now();
     final cairo = tz.TZDateTime.from(now, _cairo);
