@@ -4,10 +4,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/constants/supabase_constants.dart';
+import '../core/services/member_photo_cache.dart';
 import '../core/theme/app_colors.dart';
 
 Size memberPhotoPreviewSize(Size imageSize, Size maxSize) {
@@ -95,9 +97,11 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
       );
       return;
     }
-    _signedUrl = Supabase.instance.client.storage
-        .from(SupabaseConstants.bucketMemberPhotos)
-        .createSignedUrl(path, 3600);
+    _signedUrl = MemberPhotoCache.signedUrl(
+      client: Supabase.instance.client,
+      gymId: widget.gymId,
+      photoPath: path,
+    );
   }
 
   Widget _fallback(BuildContext context, {double? radius}) {
@@ -128,10 +132,27 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
           )
         : url == null
             ? _fallback(context, radius: radius)
-            : Image.network(
-                url,
+            : CachedNetworkImage(
+                imageUrl: url,
+                cacheKey: MemberPhotoCache.cacheKey(
+                    widget.gymId, widget.photoPath!),
+                cacheManager: MemberPhotoCache.cacheManager,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
+                maxWidthDiskCache: 1280,
+                maxHeightDiskCache: 1280,
+                memCacheWidth: (effectiveRadius *
+                        2 *
+                        MediaQuery.devicePixelRatioOf(context))
+                    .round()
+                    .clamp(64, 256),
+                memCacheHeight: (effectiveRadius *
+                        2 *
+                        MediaQuery.devicePixelRatioOf(context))
+                    .round()
+                    .clamp(64, 256),
+                placeholder: (context, url) =>
+                    _fallback(context, radius: radius),
+                errorWidget: (context, url, error) =>
                     _fallback(context, radius: radius),
               );
 
@@ -289,7 +310,14 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
                             ),
                           );
                         }
-                        return _previewImage(NetworkImage(snapshot.data!));
+                        return _previewImage(CachedNetworkImageProvider(
+                          snapshot.data!,
+                          cacheKey: MemberPhotoCache.cacheKey(
+                              widget.gymId, widget.photoPath!),
+                          cacheManager: MemberPhotoCache.cacheManager,
+                          maxWidth: 1280,
+                          maxHeight: 1280,
+                        ));
                       },
                     ),
         );
