@@ -12,8 +12,6 @@ import '../core/constants/supabase_constants.dart';
 import '../core/theme/app_colors.dart';
 
 String _memberPhotoCacheKey(String gymId, String path) => 'gym:$gymId:member-photo:$path';
-String _memberPhotoPreviewCacheKey(String gymId, String path) =>
-    '${_memberPhotoCacheKey(gymId, path)}:preview';
 
 class _SignedPhotoUrlEntry {
   final Future<String> future;
@@ -318,7 +316,7 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
                         }
                         return _previewImage(CachedNetworkImageProvider(
                           snapshot.data!,
-                          cacheKey: _memberPhotoPreviewCacheKey(widget.gymId, widget.photoPath!),
+                          cacheKey: _memberPhotoCacheKey(widget.gymId, widget.photoPath!),
                         ));
                       },
                     ),

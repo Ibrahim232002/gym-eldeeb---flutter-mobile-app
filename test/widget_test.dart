@@ -133,6 +133,9 @@ class _DashboardTestDataSyncService extends DataSyncService {
   List<Membership> get memberships => _testMemberships
       .where((membership) => membership.deletedAt == null)
       .toList();
+
+  @override
+  List<Membership> get membershipHistory => _testMemberships;
 }
 
 class _OfflineNetworkInfo extends NetworkInfo {
