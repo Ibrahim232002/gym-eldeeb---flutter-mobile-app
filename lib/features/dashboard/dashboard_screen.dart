@@ -2743,7 +2743,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                       membership.startDate.day,
                     ).isAfter(DateTime.utc(today.year, today.month, today.day));
                     final expired = membership.isExpired;
-                    final cancelled = membership.status == 'cancelled';
+                    final cancelled = membership.status == 'cancelled' || membership.deletedAt != null;
                     final statusColor = cancelled || expired
                         ? context.appPalette.error
                         : startsInFuture

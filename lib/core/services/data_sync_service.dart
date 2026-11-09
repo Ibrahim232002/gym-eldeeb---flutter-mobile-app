@@ -1626,7 +1626,9 @@ class DataSyncService extends ChangeNotifier {
     final now = DateTime.now();
     final originalMembership =
         _memberships.where((m) => m.id == id && m.gymId == gymId).firstOrNull;
-    if (originalMembership == null) return false;
+    if (originalMembership == null) {
+      throw StateError('الاشتراك مش موجود أو اتلغى بالفعل. حدّث البيانات وجرب تاني.');
+    }
     final originalPayments = _payments
         .where((p) => p.membershipId == id && p.gymId == originalMembership.gymId)
         .toList();

@@ -34,11 +34,8 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'MEMBERSHIP_NOT_FOUND';
   END IF;
 
-  IF v_membership.status = 'cancelled' THEN
-    RETURN jsonb_build_object('membership_id', p_membership_id,
-      'cancelled_payments', 0, 'already_cancelled', true);
-  END IF;
-
+  -- Always finish any part of a previous partial/legacy cancellation.
+  -- Repeating this function is safe: already-cancelled payments are untouched.
   UPDATE public.memberships
   SET status = 'cancelled',
       deleted_at = COALESCE(deleted_at, now()),
@@ -57,7 +54,7 @@ BEGIN
 
   GET DIAGNOSTICS v_cancelled_payments = ROW_COUNT;
   RETURN jsonb_build_object('membership_id', p_membership_id,
-    'cancelled_payments', v_cancelled_payments, 'already_cancelled', false);
+    'cancelled_payments', v_cancelled_payments);
 END;
 $$;
 
