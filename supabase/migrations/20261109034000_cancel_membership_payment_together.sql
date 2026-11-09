@@ -40,7 +40,9 @@ BEGIN
   END IF;
 
   UPDATE public.memberships
-  SET status = 'cancelled', updated_at = now()
+  SET status = 'cancelled',
+      deleted_at = COALESCE(deleted_at, now()),
+      updated_at = now()
   WHERE id = p_membership_id AND gym_id = v_gym_id;
 
   UPDATE public.payments

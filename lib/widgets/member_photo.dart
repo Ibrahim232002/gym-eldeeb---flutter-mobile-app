@@ -3,12 +3,15 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/constants/supabase_constants.dart';
 import '../core/theme/app_colors.dart';
+
+String _memberPhotoCacheKey(String gymId, String path) => 'gym:$gymId:member-photo:$path';
 
 class _SignedPhotoUrlEntry {
   final Future<String> future;
@@ -145,11 +148,16 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
           )
         : url == null
             ? _fallback(context, radius: radius)
-            : Image.network(
-                url,
+            : CachedNetworkImage(
+                imageUrl: url,
+                cacheKey: _memberPhotoCacheKey(widget.gymId, widget.photoPath!),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    _fallback(context, radius: radius),
+                memCacheWidth: 256,
+                memCacheHeight: 256,
+                maxWidthDiskCache: 256,
+                maxHeightDiskCache: 256,
+                placeholder: (_, __) => _fallback(context, radius: radius),
+                errorWidget: (_, __, ___) => _fallback(context, radius: radius),
               );
 
     return ClipOval(
@@ -306,7 +314,10 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
                             ),
                           );
                         }
-                        return _previewImage(NetworkImage(snapshot.data!));
+                        return _previewImage(CachedNetworkImageProvider(
+                          snapshot.data!,
+                          cacheKey: _memberPhotoCacheKey(widget.gymId, widget.photoPath!),
+                        ));
                       },
                     ),
         );

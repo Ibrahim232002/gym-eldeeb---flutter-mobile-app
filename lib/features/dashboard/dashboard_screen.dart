@@ -393,7 +393,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       case 2:
         return 'خطط وباقات الاشتراكات';
       case 3:
-        return 'سجل الاشتراكات الفعالة';
+        return 'سجل الاشتراكات';
       case 4:
         return 'سجل المدفوعات والإيرادات';
       case 6:
@@ -2578,6 +2578,8 @@ class _EditPlanDialogState extends ConsumerState<_EditPlanDialog> {
 // ==========================================
 // --- TAB 3: MEMBERSHIPS LOGS ---
 // ==========================================
+enum _MembershipLogFilter { all, active, expired, upcoming, cancelled }
+
 class _MembershipsTab extends ConsumerStatefulWidget {
   const _MembershipsTab();
 
@@ -2588,6 +2590,7 @@ class _MembershipsTab extends ConsumerStatefulWidget {
 class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  _MembershipLogFilter _selectedFilter = _MembershipLogFilter.all;
 
   @override
   void dispose() {
@@ -2598,31 +2601,58 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(dataSyncServiceProvider);
-    final allMemberships = data.memberships;
+    final allMemberships = data.membershipHistory;
     final membersById = {for (final member in data.members) member.id: member};
-    final memberships = allMemberships.where((membership) {
-      if (membership.status == 'cancelled' || !membership.isExpired) return true;
-      return !allMemberships.any((successor) => successor.id != membership.id &&
-          successor.gymId == membership.gymId && successor.memberId == membership.memberId &&
-          successor.status == 'active' && successor.deletedAt == null &&
-          successor.startDate.isAfter(membership.endDate));
+    final today = GymClock.today();
+
+    bool hasLaterRenewal(Membership membership) => allMemberships.any((successor) =>
+        successor.id != membership.id &&
+        successor.gymId == membership.gymId &&
+        successor.memberId == membership.memberId &&
+        successor.status == 'active' &&
+        successor.deletedAt == null &&
+        successor.startDate.isAfter(membership.endDate));
+
+    final visibleHistory = allMemberships.where((membership) {
+      final member = membersById[membership.memberId];
+      return member != null && member.gymId == membership.gymId;
     }).toList();
+
+    final memberships = visibleHistory.where((membership) {
+      final cancelled =
+          membership.status == 'cancelled' || membership.deletedAt != null;
+      if (_selectedFilter == _MembershipLogFilter.cancelled) return cancelled;
+      if (cancelled) return false;
+      if (membership.isExpired && hasLaterRenewal(membership)) return false;
+
+      switch (_selectedFilter) {
+        case _MembershipLogFilter.all:
+          return true;
+        case _MembershipLogFilter.active:
+          return membership.isEligibleOn(today);
+        case _MembershipLogFilter.expired:
+          return membership.isExpired;
+        case _MembershipLogFilter.upcoming:
+          return membership.status == 'active' &&
+              DateTime.utc(
+                membership.startDate.year,
+                membership.startDate.month,
+                membership.startDate.day,
+              ).isAfter(DateTime.utc(today.year, today.month, today.day));
+        case _MembershipLogFilter.cancelled:
+          return false;
+      }
+    }).toList();
+
     final plansById = {for (final plan in data.plans) plan.id: plan};
     final normalizedQuery = _normalizeSearchDigits(_searchQuery.trim());
-
     final filteredMemberships = memberships.where((membership) {
       if (normalizedQuery.isEmpty) return true;
-
-      final member = membersById[membership.memberId];
+      final member = membersById[membership.memberId]!;
       final plan = plansById[membership.planId];
-      final matchesMember =
-          member != null && memberMatchesSearch(member, normalizedQuery);
-      final matchesPlan = _normalizeSearchDigits(plan?.name ?? '')
-          .contains(normalizedQuery);
-      return matchesMember || matchesPlan;
+      return memberMatchesSearch(member, normalizedQuery) ||
+          _normalizeSearchDigits(plan?.name ?? '').contains(normalizedQuery);
     }).toList();
-
-    final today = GymClock.today();
 
     return Column(
       children: [
@@ -2654,14 +2684,37 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
             ),
           ),
         ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              _membershipFilterChip('الكل', _MembershipLogFilter.all),
+              const SizedBox(width: 8),
+              _membershipFilterChip('ساري', _MembershipLogFilter.active),
+              const SizedBox(width: 8),
+              _membershipFilterChip('منتهي', _MembershipLogFilter.expired),
+              const SizedBox(width: 8),
+              _membershipFilterChip('قادم', _MembershipLogFilter.upcoming),
+              const SizedBox(width: 8),
+              _membershipFilterChip('ملغي', _MembershipLogFilter.cancelled),
+            ],
+          ),
+        ),
         Expanded(
           child: filteredMemberships.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      memberships.isEmpty
-                          ? 'لا توجد اشتراكات مسجلة حالياً.'
+                      _searchQuery.isEmpty
+                          ? switch (_selectedFilter) {
+                              _MembershipLogFilter.all => 'لا توجد اشتراكات مسجلة حالياً.',
+                              _MembershipLogFilter.active => 'مفيش اشتراكات سارية حالياً.',
+                              _MembershipLogFilter.expired => 'مفيش اشتراكات منتهية بدون تجديد.',
+                              _MembershipLogFilter.upcoming => 'مفيش اشتراكات هتبدأ لاحقاً.',
+                              _MembershipLogFilter.cancelled => 'مفيش اشتراكات ملغاة.',
+                            }
                           : 'لا توجد نتائج مطابقة للبحث.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -2674,15 +2727,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                   itemCount: filteredMemberships.length,
                   itemBuilder: (context, index) {
                     final membership = filteredMemberships[index];
-                    final member = membersById[membership.memberId] ??
-                        Member(
-                          id: '',
-                          gymId: '',
-                          fullName: 'عضو محذوف',
-                          joinDate: DateTime.now(),
-                          createdAt: DateTime.now(),
-                          updatedAt: DateTime.now(),
-                        );
+                    final member = membersById[membership.memberId]!;
                     final plan = plansById[membership.planId] ??
                         MembershipPlan(
                           id: '',
@@ -2716,7 +2761,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                       color: context.appPalette.surfaceCard,
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
-                        onTap: () {
+                        onTap: cancelled ? null : () {
                           showDialog<void>(
                             context: context,
                             builder: (_) =>
@@ -2783,7 +2828,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                                 ),
                               ),
                             ),
-                            IconButton(
+                            if (!cancelled) IconButton(
                               icon: Icon(
                                 Icons.edit_rounded,
                                 size: 18,
@@ -2799,7 +2844,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                                 );
                               },
                             ),
-                            IconButton(
+                            if (!cancelled) IconButton(
                               icon: Icon(
                                 Icons.delete_outline_rounded,
                                 size: 18,
@@ -2839,6 +2884,16 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
     );
   }
 
+  Widget _membershipFilterChip(String label, _MembershipLogFilter filter) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _selectedFilter == filter,
+      onSelected: (selected) {
+        if (selected) setState(() => _selectedFilter = filter);
+      },
+    );
+  }
+
   void _confirmDeleteMembership(
       BuildContext context, WidgetRef ref, Membership membership) {
     showDialog<void>(
@@ -2847,9 +2902,9 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
         textDirection: ui.TextDirection.rtl,
         child: AlertDialog(
           backgroundColor: context.appPalette.surfaceCard,
-          title: const Text('تأكيد حذف الاشتراك'),
+          title: const Text('تأكيد إلغاء الاشتراك'),
           content: const Text(
-              'هل أنت متأكد من حذف هذا الاشتراك؟ سيتم وضع علامة ملغى وحذفه من السجلات.'),
+              'هيتم إلغاء الاشتراك والدفعات المرتبطة به، مع الاحتفاظ بالسجل للمراجعة.'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -2859,17 +2914,40 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                   backgroundColor: context.appPalette.error),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await ref
-                    .read(dataSyncServiceProvider.notifier)
-                    .deleteMembership(membership.id);
-                if (!context.mounted) return;
-                showTopSnackBar(context, 
-                  const SnackBar(
-                      content: Text('تم حذف الاشتراك بنجاح',
-                          textDirection: ui.TextDirection.rtl)),
-                );
+                try {
+                  final completed = await ref
+                      .read(dataSyncServiceProvider.notifier)
+                      .deleteMembership(membership.id);
+                  if (!context.mounted) return;
+                  showTopSnackBar(
+                    context,
+                    SnackBar(
+                      content: Text(
+                        completed
+                            ? 'تم إلغاء الاشتراك والدفعات المرتبطة به.'
+                            : 'طلب الإلغاء اتحفظ على الجهاز، وهيتنفذ لما الإنترنت يرجع.',
+                        textDirection: ui.TextDirection.rtl,
+                      ),
+                      backgroundColor: completed
+                          ? context.appPalette.success
+                          : context.appPalette.primary,
+                    ),
+                  );
+                } catch (_) {
+                  if (!context.mounted) return;
+                  showTopSnackBar(
+                    context,
+                    SnackBar(
+                      content: const Text(
+                        'ماقدرناش نلغي الاشتراك. اتأكد من إعدادات قاعدة البيانات وجرب تاني.',
+                        textDirection: ui.TextDirection.rtl,
+                      ),
+                      backgroundColor: context.appPalette.error,
+                    ),
+                  );
+                }
               },
-              child: const Text('حذف الاشتراك',
+              child: const Text('إلغاء الاشتراك',
                   style: TextStyle(color: Colors.white)),
             ),
           ],

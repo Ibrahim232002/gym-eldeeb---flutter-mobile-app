@@ -229,8 +229,10 @@ class DataSyncService extends ChangeNotifier {
   List<MembershipPlan> get plans =>
       _plans.where((p) => p.deletedAt == null).toList();
   List<MembershipPlan> get activePlans => selectableMembershipPlans(_plans);
+  List<Membership> get membershipHistory =>
+      _memberships.where((m) => m.gymId == _gymId).toList();
   List<Membership> get memberships =>
-      _memberships.where((m) => m.deletedAt == null).toList();
+      _memberships.where((m) => m.deletedAt == null && m.gymId == _gymId).toList();
   List<Payment> get payments => _payments;
   List<Membership> get expiringMemberships => expiringMembershipsWithinDays(
       memberships, GymClock.today(), members: members);
@@ -1620,30 +1622,58 @@ class DataSyncService extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteMembership(String id) async {
+  Future<bool> deleteMembership(String id) async {
     final now = DateTime.now();
-    final target = _memberships.where((m) => m.id == id).firstOrNull;
-    if (target == null || target.gymId != gymId) return;
+    final originalMembership =
+        _memberships.where((m) => m.id == id && m.gymId == gymId).firstOrNull;
+    if (originalMembership == null) return false;
+    final originalPayments = _payments
+        .where((p) => p.membershipId == id && p.gymId == originalMembership.gymId)
+        .toList();
+
     _memberships = _memberships.map((m) => m.id == id
-        ? m.copyWith(status: 'cancelled', updatedAt: now) : m).toList();
-    _payments = _payments.map((p) => p.membershipId == id && p.gymId == target.gymId
-        ? p.copyWith(isCancelled: true, cancelledAt: now, cancellationReason: 'membership_cancelled', updatedAt: now) : p).toList();
+        ? m.copyWith(status: 'cancelled', deletedAt: now, updatedAt: now)
+        : m).toList();
+    _payments = _payments.map((p) =>
+        p.membershipId == id && p.gymId == originalMembership.gymId
+            ? p.copyWith(
+                isCancelled: true,
+                cancelledAt: now,
+                cancellationReason: 'membership_cancelled',
+                updatedAt: now,
+              )
+            : p).toList();
+    await _persistMembershipAndPaymentCache();
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await Future.wait<bool>([
-      prefs.setString(_keyMemberships, jsonEncode(_memberships.map((m) => m.toJson()).toList())),
-      prefs.setString(_keyPayments, jsonEncode(_payments.map((p) => p.toJson()).toList())),
-    ]);
+
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.rpc<Map<String, dynamic>>('cancel_membership_with_payment', params: {'p_membership_id': id});
-      } catch (error) {
-        await _queuePendingWrite('memberships', 'cancel_with_payment', {'id': id}, error: error);
+        await _supabase.rpc<Map<String, dynamic>>(
+          'cancel_membership_with_payment',
+          params: {'p_membership_id': id},
+        );
+        return true;
+      } catch (_) {
+        _memberships = _memberships.map((m) =>
+            m.id == id ? originalMembership : m).toList();
+        _payments = [
+          ..._payments.where((p) =>
+              p.membershipId != id || p.gymId != originalMembership.gymId),
+          ...originalPayments,
+        ];
+        await _persistMembershipAndPaymentCache();
+        notifyListeners();
+        rethrow;
       }
-    } else {
-      await _queuePendingWrite('memberships', 'cancel_with_payment', {'id': id});
     }
+
+    await _queuePendingWrite(
+      'memberships',
+      'cancel_with_payment',
+      {'id': id},
+    );
+    return false;
   }
 
   Future<void> editPayment(Payment updated) async {
