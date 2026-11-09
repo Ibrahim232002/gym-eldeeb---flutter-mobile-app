@@ -500,12 +500,11 @@ class _DashboardOverviewTab extends ConsumerWidget {
     final expiringSoonMemberships = data.expiringMemberships;
 
     final monthPayments = payments
-        .where((payment) =>
-            payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .where((payment) => payment.paidAt.year == now.year && payment.paidAt.month == now.month)
         .toList()
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
     final monthRevenue =
-        monthPayments.fold<double>(0, (sum, payment) => sum + payment.amount);
+        monthPayments.where((payment) => !payment.isCancelled).fold<double>(0, (sum, payment) => sum + payment.amount);
     final monthLabel = _formatArabicMonth(now);
 
     return SingleChildScrollView(
@@ -818,7 +817,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                         color: context.appPalette.success, size: 18),
                   ),
                   title: Text(
-                    payment.notes ?? 'إيصال دفع',
+                    payment.isCancelled ? 'دفعة ملغاة' : (payment.notes ?? 'إيصال دفع'),
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 14),
                   ),
@@ -1209,7 +1208,7 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
   final membershipPayments = messageMembership == null
       ? <Payment>[]
       : data.payments
-          .where((payment) => payment.membershipId == messageMembership.id)
+          .where((payment) => payment.membershipId == messageMembership.id && !payment.isCancelled)
           .toList()
         ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
   final paidAmount = membershipPayments.fold<double>(
@@ -2042,7 +2041,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                             fontWeight: FontWeight.bold,
                             color: context.appPalette.success)),
                     subtitle: Text(
-                        '${p.paymentMethod == "cash" ? "نقدي" : "فيزا"} • ${RtlSupport.formatDate(p.paidAt)}'),
+                        '${p.isCancelled ? "ملغاة • " : ""}${p.paymentMethod == "cash" ? "نقدي" : "فيزا"} • ${RtlSupport.formatDate(p.paidAt)}'),
                     trailing: Icon(Icons.check_circle_rounded,
                         color: context.appPalette.success, size: 16),
                   ),
@@ -2599,8 +2598,15 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(dataSyncServiceProvider);
-    final memberships = data.memberships;
+    final allMemberships = data.memberships;
     final membersById = {for (final member in data.members) member.id: member};
+    final memberships = allMemberships.where((membership) {
+      if (membership.status == 'cancelled' || !membership.isExpired) return true;
+      return !allMemberships.any((successor) => successor.id != membership.id &&
+          successor.gymId == membership.gymId && successor.memberId == membership.memberId &&
+          successor.status == 'active' && successor.deletedAt == null &&
+          successor.startDate.isAfter(membership.endDate));
+    }).toList();
     final plansById = {for (final plan in data.plans) plan.id: plan};
     final normalizedQuery = _normalizeSearchDigits(_searchQuery.trim());
 
@@ -3537,14 +3543,10 @@ class _PaymentsTab extends ConsumerWidget {
     final now = DateTime.now();
     final monthLabel = _formatArabicMonth(now);
     final monthlyPayments = data.payments
-        .where((payment) =>
-            payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .where((payment) => payment.paidAt.year == now.year && payment.paidAt.month == now.month)
         .toList()
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
-    final monthlyRevenue = monthlyPayments.fold<double>(
-      0,
-      (sum, payment) => sum + payment.amount,
-    );
+    final monthlyRevenue = monthlyPayments.where((payment) => !payment.isCancelled).fold<double>(0, (sum, payment) => sum + payment.amount);
 
     return Column(
       children: [
@@ -3612,7 +3614,7 @@ class _PaymentsTab extends ConsumerWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    payment.notes ?? 'إيصال دفع',
+                                    payment.isCancelled ? 'دفعة ملغاة' : (payment.notes ?? 'إيصال دفع'),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(

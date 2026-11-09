@@ -10,6 +10,25 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/constants/supabase_constants.dart';
 import '../core/theme/app_colors.dart';
 
+class _SignedPhotoUrlEntry {
+  final Future<String> future;
+  final DateTime expiresAt;
+  const _SignedPhotoUrlEntry(this.future, this.expiresAt);
+}
+
+final Map<String, _SignedPhotoUrlEntry> _signedPhotoUrlCache = {};
+
+Future<String> _cachedMemberPhotoUrl(String gymId, String path) {
+  final key = '$gymId/$path';
+  final now = DateTime.now();
+  final cached = _signedPhotoUrlCache[key];
+  if (cached != null && cached.expiresAt.isAfter(now)) return cached.future;
+  final future = Supabase.instance.client.storage.from(SupabaseConstants.bucketMemberPhotos).createSignedUrl(path, 3600);
+  _signedPhotoUrlCache[key] = _SignedPhotoUrlEntry(future, now.add(const Duration(minutes: 50)));
+  future.then<void>((_) {}, onError: (Object error) { _signedPhotoUrlCache.remove(key); });
+  return future;
+}
+
 Size memberPhotoPreviewSize(Size imageSize, Size maxSize) {
   if (imageSize.width <= 0 || imageSize.height <= 0) {
     return Size.zero;
@@ -95,9 +114,7 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
       );
       return;
     }
-    _signedUrl = Supabase.instance.client.storage
-        .from(SupabaseConstants.bucketMemberPhotos)
-        .createSignedUrl(path, 3600);
+    _signedUrl = _cachedMemberPhotoUrl(widget.gymId, path);
   }
 
   Widget _fallback(BuildContext context, {double? radius}) {

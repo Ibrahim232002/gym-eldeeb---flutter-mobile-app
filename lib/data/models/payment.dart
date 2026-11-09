@@ -8,6 +8,9 @@ class Payment {
   final DateTime paidAt;
   final String? recordedBy;
   final String? notes;
+  final bool isCancelled;
+  final DateTime? cancelledAt;
+  final String? cancellationReason;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int syncVersion;
@@ -21,6 +24,9 @@ class Payment {
     required this.paidAt,
     this.recordedBy,
     this.notes,
+    this.isCancelled = false,
+    this.cancelledAt,
+    this.cancellationReason,
     required this.createdAt,
     required this.updatedAt,
     this.syncVersion = 1,
@@ -38,6 +44,11 @@ class Payment {
           : DateTime.now(),
       recordedBy: json['recorded_by'] as String?,
       notes: json['notes'] as String?,
+      isCancelled: json['is_cancelled'] as bool? ?? false,
+      cancelledAt: json['cancelled_at'] != null
+          ? DateTime.tryParse(json['cancelled_at'] as String)
+          : null,
+      cancellationReason: json['cancellation_reason'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -58,6 +69,9 @@ class Payment {
       'paid_at': paidAt.toIso8601String(),
       'recorded_by': recordedBy,
       'notes': notes,
+      'is_cancelled': isCancelled,
+      'cancelled_at': cancelledAt?.toIso8601String(),
+      'cancellation_reason': cancellationReason,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'sync_version': syncVersion,
@@ -73,6 +87,9 @@ class Payment {
     DateTime? paidAt,
     String? recordedBy,
     String? notes,
+    bool? isCancelled,
+    DateTime? cancelledAt,
+    String? cancellationReason,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? syncVersion,
@@ -86,6 +103,9 @@ class Payment {
       paidAt: paidAt ?? this.paidAt,
       recordedBy: recordedBy ?? this.recordedBy,
       notes: notes ?? this.notes,
+      isCancelled: isCancelled ?? this.isCancelled,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncVersion: syncVersion ?? this.syncVersion,

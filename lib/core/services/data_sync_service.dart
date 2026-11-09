@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -606,6 +607,10 @@ class DataSyncService extends ChangeNotifier {
   }
 
   Future<void> _executePendingActionOnRemote(PendingAction action) async {
+    if (action.table == 'memberships' && action.action == 'cancel_with_payment') {
+      await _supabase.rpc<Map<String, dynamic>>('cancel_membership_with_payment', params: {'p_membership_id': action.payload['id']});
+      return;
+    }
     if (action.table == 'members' && action.action == 'set_activation') {
       final response = await _supabase.rpc<Map<String, dynamic>>(
         'set_member_activation', params: action.payload);
@@ -1140,7 +1145,7 @@ class DataSyncService extends ChangeNotifier {
       );
     }
     final gymId = await requireGymId();
-    final path = '$gymId/$memberId.$normalizedExtension';
+    final path = '$gymId/$memberId-${const Uuid().v4()}.$normalizedExtension';
     await _supabase.storage
         .from(SupabaseConstants.bucketMemberPhotos)
         .uploadBinary(
@@ -1618,31 +1623,27 @@ class DataSyncService extends ChangeNotifier {
 
   Future<void> deleteMembership(String id) async {
     final now = DateTime.now();
+    final target = _memberships.where((m) => m.id == id).firstOrNull;
+    if (target == null || target.gymId != gymId) return;
     _memberships = _memberships.map((m) => m.id == id
-        ? m.copyWith(deletedAt: now, updatedAt: now) : m).toList();
+        ? m.copyWith(status: 'cancelled', updatedAt: now) : m).toList();
+    _payments = _payments.map((p) => p.membershipId == id && p.gymId == target.gymId
+        ? p.copyWith(isCancelled: true, cancelledAt: now, cancellationReason: 'membership_cancelled', updatedAt: now) : p).toList();
     notifyListeners();
-
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyMemberships,
-        jsonEncode(_memberships.map((m) => m.toJson()).toList()));
-
+    await Future.wait<bool>([
+      prefs.setString(_keyMemberships, jsonEncode(_memberships.map((m) => m.toJson()).toList())),
+      prefs.setString(_keyPayments, jsonEncode(_payments.map((p) => p.toJson()).toList())),
+    ]);
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
-        await _supabase.from(SupabaseConstants.tableMemberships).update({
-          'deleted_at': now.toIso8601String(),
-          'updated_at': now.toIso8601String(),
-        }).eq('id', id);
+        await _supabase.rpc<Map<String, dynamic>>('cancel_membership_with_payment', params: {'p_membership_id': id});
       } catch (error) {
-        await _queuePendingWrite(
-          'memberships',
-          'delete',
-          {'id': id},
-          error: error,
-        );
+        await _queuePendingWrite('memberships', 'cancel_with_payment', {'id': id}, error: error);
       }
     } else {
-      await _queuePendingWrite('memberships', 'delete', {'id': id});
+      await _queuePendingWrite('memberships', 'cancel_with_payment', {'id': id});
     }
   }
 
