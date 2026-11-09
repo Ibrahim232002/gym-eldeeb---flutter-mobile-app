@@ -10,6 +10,7 @@ import '../constants/supabase_constants.dart';
 import '../network/network_info.dart';
 import '../utils/member_identity.dart';
 import '../utils/gym_clock.dart';
+import 'member_photo_cache.dart';
 
 import '../../data/models/member.dart';
 import '../../data/models/membership_plan.dart';
@@ -755,11 +756,16 @@ class DataSyncService extends ChangeNotifier {
           .select()
           .eq('gym_id', gymId)
           .order('start_date', ascending: false),
-      _supabase
-          .from(SupabaseConstants.tablePayments)
-          .select()
-          .eq('gym_id', gymId)
-          .order('paid_at', ascending: false),
+      (() {
+        final month = GymClock.currentMonthUtcRange();
+        return _supabase
+            .from(SupabaseConstants.tablePayments)
+            .select()
+            .eq('gym_id', gymId)
+            .gte('paid_at', month.startUtc.toIso8601String())
+            .lt('paid_at', month.endUtc.toIso8601String())
+            .order('paid_at', ascending: false);
+      })(),
     ]);
 
     // Parse the full snapshot before replacing any in-memory cache. If one
@@ -799,7 +805,7 @@ class DataSyncService extends ChangeNotifier {
       ...members.map((item) => item.createdBy).whereType<String>(),
       ...memberships.map((item) => item.createdBy).whereType<String>(),
       ...payments.map((item) => item.recordedBy).whereType<String>(),
-    }.toList();
+    }.where((id) => !_creatorNames.containsKey(id)).toList();
     if (actorIds.isNotEmpty) {
       try {
         final profiles = await _supabase
@@ -1140,7 +1146,8 @@ class DataSyncService extends ChangeNotifier {
       );
     }
     final gymId = await requireGymId();
-    final path = '$gymId/$memberId.$normalizedExtension';
+    // A new immutable path prevents a replaced photo from reusing stale cache bytes.
+    final path = '$gymId/$memberId/${const Uuid().v4()}.$normalizedExtension';
     await _supabase.storage
         .from(SupabaseConstants.bucketMemberPhotos)
         .uploadBinary(
@@ -1148,7 +1155,7 @@ class DataSyncService extends ChangeNotifier {
           photoBytes,
           fileOptions: const FileOptions(
             contentType: 'image/jpeg',
-            upsert: true,
+            upsert: false,
           ),
         );
     return path;
@@ -1163,30 +1170,69 @@ class DataSyncService extends ChangeNotifier {
         'لا يمكن الوصول إلى صور صالة أخرى.',
       );
     }
+    await MemberPhotoCache.evict(gymId, photoPath);
     await _supabase.storage
         .from(SupabaseConstants.bucketMemberPhotos)
         .remove([photoPath]);
   }
 
   Future<void> deleteMember(String id) async {
-    _members = _members
-        .map((m) => m.id == id
-            ? m.copyWith(deletedAt: DateTime.now(), updatedAt: DateTime.now())
-            : m)
-        .toList();
-    notifyListeners();
+    final now = DateTime.now();
+    final member = _members.where((item) => item.id == id).firstOrNull;
+    if (member == null || member.gymId != _gymId) return;
 
+    // A mistaken member deletion cancels current/future memberships only.
+    // Expired subscriptions and their payments remain historical records.
+    final today = GymClock.today();
+    final affectedMembershipIds = _memberships
+        .where((item) =>
+            item.memberId == id &&
+            item.gymId == member.gymId &&
+            item.deletedAt == null &&
+            item.status == 'active' &&
+            item.daysRemainingAt(today) >= 0)
+        .map((item) => item.id)
+        .toSet();
+
+    _memberships = _memberships.map((item) =>
+        affectedMembershipIds.contains(item.id)
+            ? item.copyWith(
+                status: 'cancelled', deletedAt: now, updatedAt: now)
+            : item).toList();
+    _payments = _payments.map((payment) =>
+        payment.gymId == member.gymId &&
+                payment.membershipId != null &&
+                affectedMembershipIds.contains(payment.membershipId)
+            ? payment.copyWith(
+                isCancelled: true,
+                cancelledAt: payment.cancelledAt ?? now,
+                cancelledBy: payment.cancelledBy ?? _actorUserId,
+                cancellationReason:
+                    payment.cancellationReason ?? 'member_deleted_by_mistake',
+                updatedAt: now,
+              )
+            : payment).toList();
+    _members = _members
+        .map((item) => item.id == id
+            ? item.copyWith(deletedAt: now, updatedAt: now)
+            : item)
+        .toList();
+
+    await _persistMembershipAndPaymentCache();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         _keyMembers, jsonEncode(_members.map((m) => m.toJson()).toList()));
+    notifyListeners();
 
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
+        // The database trigger cancels current/future subscriptions and their
+        // linked payments in the same transaction as this soft-delete.
         await _supabase.from(SupabaseConstants.tableMembers).update({
-          'deleted_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', id);
+          'deleted_at': now.toIso8601String(),
+          'updated_at': now.toIso8601String(),
+        }).eq('id', id).eq('gym_id', member.gymId);
       } catch (error) {
         await _queuePendingWrite(
           'members',
@@ -1618,21 +1664,38 @@ class DataSyncService extends ChangeNotifier {
 
   Future<void> deleteMembership(String id) async {
     final now = DateTime.now();
-    _memberships = _memberships.map((m) => m.id == id
-        ? m.copyWith(deletedAt: now, updatedAt: now) : m).toList();
-    notifyListeners();
+    final membership = _memberships.where((m) => m.id == id).firstOrNull;
+    if (membership == null || membership.gymId != _gymId) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyMemberships,
-        jsonEncode(_memberships.map((m) => m.toJson()).toList()));
+    _memberships = _memberships.map((item) => item.id == id
+        ? item.copyWith(
+            status: 'cancelled', deletedAt: now, updatedAt: now)
+        : item).toList();
+    _payments = _payments.map((payment) =>
+        payment.gymId == membership.gymId &&
+                payment.membershipId == membership.id
+            ? payment.copyWith(
+                isCancelled: true,
+                cancelledAt: payment.cancelledAt ?? now,
+                cancelledBy: payment.cancelledBy ?? _actorUserId,
+                cancellationReason:
+                    payment.cancellationReason ?? 'membership_deleted_by_coach',
+                updatedAt: now,
+              )
+            : payment).toList();
+
+    await _persistMembershipAndPaymentCache();
+    notifyListeners();
 
     final online = await _networkInfo.isConnected;
     if (online) {
       try {
+        // The database trigger voids linked payments in the same transaction.
         await _supabase.from(SupabaseConstants.tableMemberships).update({
+          'status': 'cancelled',
           'deleted_at': now.toIso8601String(),
           'updated_at': now.toIso8601String(),
-        }).eq('id', id);
+        }).eq('id', id).eq('gym_id', membership.gymId);
       } catch (error) {
         await _queuePendingWrite(
           'memberships',
@@ -1647,6 +1710,9 @@ class DataSyncService extends ChangeNotifier {
   }
 
   Future<void> editPayment(Payment updated) async {
+    if (updated.isCancelled) {
+      throw StateError('لا يمكن تعديل دفعة ملغاة.');
+    }
     final edited = updated.copyWith(updatedAt: DateTime.now());
 
     _payments = _payments.map((p) => p.id == edited.id ? edited : p).toList();
