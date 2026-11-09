@@ -11,6 +11,10 @@ class Payment {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int syncVersion;
+  final bool isCancelled;
+  final DateTime? cancelledAt;
+  final String? cancelledBy;
+  final String? cancellationReason;
 
   const Payment({
     required this.id,
@@ -24,6 +28,10 @@ class Payment {
     required this.createdAt,
     required this.updatedAt,
     this.syncVersion = 1,
+    this.isCancelled = false,
+    this.cancelledAt,
+    this.cancelledBy,
+    this.cancellationReason,
   });
 
   factory Payment.fromJson(Map<String, dynamic> json) {
@@ -45,6 +53,12 @@ class Payment {
           ? DateTime.parse(json['updated_at'] as String)
           : DateTime.now(),
       syncVersion: json['sync_version'] as int? ?? 1,
+      isCancelled: json['is_cancelled'] as bool? ?? false,
+      cancelledAt: json['cancelled_at'] != null
+          ? DateTime.tryParse(json['cancelled_at'] as String)
+          : null,
+      cancelledBy: json['cancelled_by'] as String?,
+      cancellationReason: json['cancellation_reason'] as String?,
     );
   }
 
@@ -61,6 +75,10 @@ class Payment {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'sync_version': syncVersion,
+      'is_cancelled': isCancelled,
+      'cancelled_at': cancelledAt?.toIso8601String(),
+      'cancelled_by': cancelledBy,
+      'cancellation_reason': cancellationReason,
     };
   }
 
@@ -76,6 +94,10 @@ class Payment {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? syncVersion,
+    bool? isCancelled,
+    DateTime? cancelledAt,
+    String? cancelledBy,
+    String? cancellationReason,
   }) {
     return Payment(
       id: id ?? this.id,
@@ -89,6 +111,10 @@ class Payment {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncVersion: syncVersion ?? this.syncVersion,
+      isCancelled: isCancelled ?? this.isCancelled,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      cancelledBy: cancelledBy ?? this.cancelledBy,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
     );
   }
 }
