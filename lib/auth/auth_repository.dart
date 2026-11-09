@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/constants/supabase_constants.dart';
 import '../core/network/network_info.dart';
 import '../data/local/local_storage_service.dart';
+import '../core/services/member_photo_cache.dart';
 import '../data/models/user_profile.dart';
 import '../data/models/gym.dart';
 import 'auth_state.dart' as app_auth;
@@ -135,6 +136,11 @@ class AuthRepository {
       // Continue cleanup even if network call fails
     }
     await _localStorage.clearAll();
+    try {
+      await MemberPhotoCache.clearAll();
+    } catch (_) {
+      // Sign-out must complete even if local image-cache cleanup fails.
+    }
   }
 
   /// Fetch user profile from database with offline cache fallback
