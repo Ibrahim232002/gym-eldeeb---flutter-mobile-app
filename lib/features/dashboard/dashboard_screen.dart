@@ -393,7 +393,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       case 2:
         return 'خطط وباقات الاشتراكات';
       case 3:
-        return 'سجل الاشتراكات الفعالة';
+        return 'سجل الاشتراكات';
       case 4:
         return 'سجل المدفوعات والإيرادات';
       case 6:
@@ -501,7 +501,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
 
     final monthPayments = payments
         .where((payment) =>
-            payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+            !payment.isCancelled && GymClock.isInCurrentMonth(payment.paidAt))
         .toList()
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
     final monthRevenue =
@@ -2599,9 +2599,13 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(dataSyncServiceProvider);
-    final memberships = data.memberships;
     final membersById = {for (final member in data.members) member.id: member};
     final plansById = {for (final plan in data.plans) plan.id: plan};
+    final memberships = membershipLogEntries(
+      data.memberships,
+      GymClock.today(),
+      members: data.members,
+    );
     final normalizedQuery = _normalizeSearchDigits(_searchQuery.trim());
 
     final filteredMemberships = memberships.where((membership) {
@@ -3537,14 +3541,12 @@ class _PaymentsTab extends ConsumerWidget {
     final now = DateTime.now();
     final monthLabel = _formatArabicMonth(now);
     final monthlyPayments = data.payments
-        .where((payment) =>
-            payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .where((payment) => GymClock.isInCurrentMonth(payment.paidAt))
         .toList()
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
-    final monthlyRevenue = monthlyPayments.fold<double>(
-      0,
-      (sum, payment) => sum + payment.amount,
-    );
+    final monthlyRevenue = monthlyPayments
+        .where((payment) => !payment.isCancelled)
+        .fold<double>(0, (sum, payment) => sum + payment.amount);
 
     return Column(
       children: [
@@ -3611,13 +3613,46 @@ class _PaymentsTab extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (payment.isCancelled)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: context.appPalette.error
+                                                .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 3),
+                                            child: Text(
+                                              'دفعة ملغاة',
+                                              style: TextStyle(
+                                                color: context.appPalette.error,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   Text(
                                     payment.notes ?? 'إيصال دفع',
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: payment.isCancelled
+                                          ? context.appPalette.textMuted
+                                          : context.appPalette.textPrimary,
+                                      decoration: payment.isCancelled
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                    ),
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
@@ -3637,9 +3672,15 @@ class _PaymentsTab extends ConsumerWidget {
                                   Text(
                                     RtlSupport.formatEgp(payment.amount),
                                     style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                        color: context.appPalette.success),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: payment.isCancelled
+                                          ? context.appPalette.textMuted
+                                          : context.appPalette.success,
+                                      decoration: payment.isCancelled
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -3665,7 +3706,8 @@ class _PaymentsTab extends ConsumerWidget {
                                           fontSize: 11,
                                           color: context.appPalette.textMuted)),
                                   const SizedBox(height: 4),
-                                  Row(
+                                  if (!payment.isCancelled)
+                                    Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       IconButton(
