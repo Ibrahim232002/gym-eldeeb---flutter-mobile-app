@@ -19,6 +19,7 @@ import 'package:gym_eldeeb/data/models/user_profile.dart';
 import 'package:gym_eldeeb/data/local/local_storage_service.dart';
 import 'package:gym_eldeeb/core/theme/app_theme.dart';
 import 'package:gym_eldeeb/core/utils/member_identity.dart';
+import 'package:gym_eldeeb/core/utils/gym_clock.dart';
 import 'package:gym_eldeeb/features/dashboard/dashboard_screen.dart';
 import 'package:gym_eldeeb/features/auth/login_screen.dart';
 import 'package:gym_eldeeb/widgets/member_photo.dart';
@@ -616,13 +617,13 @@ void main() {
         DuplicateMemberException(
           duplicateMemberFieldForPostgrestException(duplicateName)!,
         ).toString(),
-        'اسم العضو مسجل بالفعل في هذا الجيم.',
+        'الاسم ده متسجل بالفعل في الجيم.',
       );
       expect(
         DuplicateMemberException(
           duplicateMemberFieldForPostgrestException(duplicatePhone)!,
         ).toString(),
-        'رقم الموبايل مسجل بالفعل في هذا الجيم.',
+        'رقم الموبايل ده متسجل بالفعل في الجيم.',
       );
       expect(
         duplicateMemberFieldForPostgrestException(unrelatedUniqueViolation),
@@ -1582,7 +1583,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('أهلاً بيك في جيم الديب'), findsOneWidget);
-    expect(find.text('سجل دخولك لمتابعة صالة الألعاب الرياضية والاشتراكات'),
+    expect(find.text('سجّل دخولك عشان تتابع بيانات الجيم والاشتراكات.'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -1675,7 +1676,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final today = DateTime.now();
+    final today = GymClock.today();
     final dateOnly = DateTime(today.year, today.month, today.day);
 
     final activeMember = Member(
@@ -1739,7 +1740,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final today = DateTime.now();
+    final today = GymClock.today();
     final dateOnly = DateTime(today.year, today.month, today.day);
     final member = Member(
       id: 'member-expiring-actions',
@@ -1864,7 +1865,7 @@ void main() {
 
     expect(find.text('الاسم بالكامل'), findsOneWidget);
     expect(find.text('مدرب تجريبي'), findsOneWidget);
-    expect(find.text('اسم الصالة (العربي)'), findsOneWidget);
+    expect(find.text('اسم الجيم'), findsOneWidget);
     expect(find.text('اسم الصالة (English)'), findsNothing);
     expect(find.text('معرف الحساب (User ID)'), findsNothing);
     expect(find.text(accountId), findsNothing);

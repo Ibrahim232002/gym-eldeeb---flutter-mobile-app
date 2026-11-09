@@ -9,6 +9,7 @@ import '../../auth/auth_provider.dart';
 import '../constants/supabase_constants.dart';
 import '../network/network_info.dart';
 import '../utils/member_identity.dart';
+import '../utils/gym_clock.dart';
 
 import '../../data/models/member.dart';
 import '../../data/models/membership_plan.dart';
@@ -221,13 +222,32 @@ class DataSyncService extends ChangeNotifier {
   String? get syncErrorMessage => _syncErrorMessage;
   String? get gymId => _gymId;
   List<Member> get members =>
-      _members.where((m) => m.deletedAt == null).toList();
+      _members.where((m) => m.deletedAt == null && m.gymId == _gymId)
+          .map((m) => m.copyWith(
+              isActive: memberIsActiveOn(m, _memberships, GymClock.today())))
+          .toList();
   List<MembershipPlan> get plans =>
       _plans.where((p) => p.deletedAt == null).toList();
   List<MembershipPlan> get activePlans => selectableMembershipPlans(_plans);
   List<Membership> get memberships =>
       _memberships.where((m) => m.deletedAt == null).toList();
   List<Payment> get payments => _payments;
+  List<Membership> get expiringMemberships => expiringMembershipsWithinDays(
+      memberships, GymClock.today(), members: members);
+
+  /// Keep soft-deleted parents available for historical payment attribution.
+  String paymentMemberName(Payment payment) {
+    final membership = _memberships.where((m) =>
+        m.id == payment.membershipId && m.gymId == payment.gymId).firstOrNull;
+    final member = _members.where((m) =>
+        m.id == membership?.memberId && m.gymId == payment.gymId).firstOrNull;
+    if (member == null || member.fullName.trim().isEmpty) return 'عضو غير متاح';
+    return member.deletedAt == null
+        ? member.fullName
+        : '${member.fullName} (محذوف)';
+  }
+
+  void refreshMembershipDay() => notifyListeners();
   final Map<String, String> _creatorNames = {};
   String creatorName(String? userId) => userId == null
       ? 'غير معروف'
@@ -313,6 +333,7 @@ class DataSyncService extends ChangeNotifier {
   String get _keyPlans => 'cache_plans_${_gymId ?? "default"}';
   String get _keyMemberships => 'cache_memberships_${_gymId ?? "default"}';
   String get _keyPayments => 'cache_payments_${_gymId ?? "default"}';
+  String get _keyCreatorNames => 'cache_creator_names_${_gymId ?? "default"}';
   String get _keyPendingQueue => 'pending_queue_${_gymId ?? "default"}';
 
   // --- Initialize & Local Loading ---
@@ -386,6 +407,12 @@ class DataSyncService extends ChangeNotifier {
       } catch (_) {}
     }
 
+    final creatorNames = prefs.getString(_keyCreatorNames);
+    if (creatorNames != null) {
+      try {
+        _creatorNames.addAll(Map<String, String>.from(jsonDecode(creatorNames) as Map));
+      } catch (_) { /* Legacy/malformed optional display cache. */ }
+    }
     notifyListeners();
 
     // Attempt initial sync if online
@@ -499,6 +526,17 @@ class DataSyncService extends ChangeNotifier {
         try {
           await _executePendingActionOnRemote(item);
         } catch (e) {
+          if (item.action == 'set_activation' && e is PostgrestException &&
+              e.code == '22023' &&
+              e.message.contains('MEMBER_ACTIVATION_CHANGED_REFRESH_REQUIRED')) {
+            // A later renewal/manual decision superseded this offline intent.
+            // Restore that member even if another unrelated queue item fails.
+            final current = await _supabase.from(SupabaseConstants.tableMembers)
+                .select().eq('id', item.payload['p_member_id'] as String)
+                .eq('gym_id', gymId).single();
+            await _saveMemberLocally(Member.fromJson(current));
+            continue;
+          }
           if (e is PostgrestException && e.code == '23P01') {
             duplicateMembershipCount++;
           }
@@ -526,11 +564,15 @@ class DataSyncService extends ChangeNotifier {
         }
       }
 
-      await _savePendingQueue(remaining);
+      // Preserve actions queued while an earlier network request was in flight.
+      final processedIds = queue.map((item) => item.id).toSet();
+      final addedDuringSync = (await _getPendingQueue())
+          .where((item) => !processedIds.contains(item.id)).toList();
+      await _savePendingQueue([...remaining, ...addedDuringSync]);
 
       // Do not replace optimistic local records while a queued write is still
       // failing. Once the queue is clear, refresh from the authoritative source.
-      if (failedCount == 0 && blockedCount == 0) {
+      if (failedCount == 0 && blockedCount == 0 && addedDuringSync.isEmpty) {
         await _fetchRemoteData(gymId);
         _syncStatus = SyncStatus.synced;
       } else {
@@ -564,13 +606,19 @@ class DataSyncService extends ChangeNotifier {
   }
 
   Future<void> _executePendingActionOnRemote(PendingAction action) async {
+    if (action.table == 'members' && action.action == 'set_activation') {
+      final response = await _supabase.rpc<Map<String, dynamic>>(
+        'set_member_activation', params: action.payload);
+      await _saveMemberLocally(Member.fromJson(response));
+      return;
+    }
     if (action.table == 'members' &&
         action.action == 'update_with_photo_cleanup') {
       final memberPayload = action.payload['member'] as Map<String, dynamic>;
       final photoPath = action.payload['photo_path_to_delete'] as String;
       await _supabase
           .from(SupabaseConstants.tableMembers)
-          .update(memberPayload)
+          .update(_memberDetailsPayload(memberPayload))
           .eq('id', memberPayload['id'] as Object);
       await deleteMemberPhoto(photoPath);
       return;
@@ -623,12 +671,16 @@ class DataSyncService extends ChangeNotifier {
               Map<String, dynamic>.from(result['payment'] as Map))
           : null;
       if (confirmedMembership?.id != queuedMembership.id ||
+          confirmedMembership?.gymId != queuedMembership.gymId ||
+          confirmedMembership?.memberId != queuedMembership.memberId ||
           confirmedPayment?.id != queuedPayment.id ||
+          confirmedPayment?.gymId != queuedPayment.gymId ||
           confirmedPayment?.membershipId != queuedMembership.id ||
           confirmedPayment?.amount != queuedMembership.price ||
           confirmedPayment?.paymentMethod != queuedPayment.paymentMethod) {
         throw StateError('لم يؤكد الخادم الاشتراك والدفعة الأولية معاً.');
       }
+      await _acceptConfirmedMembership(result, confirmedMembership!, confirmedPayment!);
       return;
     }
 
@@ -652,11 +704,18 @@ class DataSyncService extends ChangeNotifier {
     }
 
     if (action.action == 'create') {
-      await _supabase.from(table).upsert(action.payload);
+      if (action.table == 'members') {
+        // A retry of an old create must never overwrite a renewed member.
+        await _supabase.from(table).upsert(
+          _memberDetailsPayload(action.payload), ignoreDuplicates: true);
+      } else {
+        await _supabase.from(table).upsert(action.payload);
+      }
     } else if (action.action == 'update') {
       await _supabase
           .from(table)
-          .update(action.payload)
+          .update(action.table == 'members'
+              ? _memberDetailsPayload(action.payload) : action.payload)
           .eq('id', action.payload['id'] as Object);
     } else if (action.action == 'delete') {
       if (action.table == 'payments') {
@@ -746,6 +805,7 @@ class DataSyncService extends ChangeNotifier {
         final profiles = await _supabase
             .from('profiles')
             .select('id, full_name')
+            .eq('gym_id', gymId)
             .inFilter('id', actorIds);
         for (final row in profiles as List) {
           final id = row['id'] as String?;
@@ -754,6 +814,7 @@ class DataSyncService extends ChangeNotifier {
             _creatorNames[id] = name.trim();
           }
         }
+        await prefs.setString(_keyCreatorNames, jsonEncode(_creatorNames));
       } catch (_) {
         // Keep the UI usable if profile-name lookup is unavailable.
       }
@@ -784,7 +845,8 @@ class DataSyncService extends ChangeNotifier {
       phone: phone?.trim(),
       notes: notes?.trim(),
       joinDate: joinDate,
-      isActive: true,
+      isActive: false,
+      manuallyDeactivated: false,
       createdBy: _actorUserId,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -805,7 +867,7 @@ class DataSyncService extends ChangeNotifier {
       try {
         await _supabase
             .from(SupabaseConstants.tableMembers)
-            .upsert(newMember.toJson());
+            .upsert(_memberDetailsPayload(newMember.toJson()));
       } catch (e) {
         if (e is PostgrestException && e.code == '23505') {
           final duplicate = _memberUniqueViolation(e);
@@ -856,20 +918,41 @@ class DataSyncService extends ChangeNotifier {
   Future<bool> editMember(
     Member updated, {
     String? photoPathToDelete,
+    bool? manualActivation,
   }) async {
-    final edited = updated.copyWith(updatedAt: DateTime.now());
+    var edited = updated.copyWith(updatedAt: DateTime.now());
     final online = await _networkInfo.isConnected;
     await _ensureMemberUnique(
       edited,
       online: online,
       excludingMemberId: edited.id,
     );
+    if (manualActivation != null) {
+      final params = {
+        'p_member_id': edited.id,
+        'p_is_active': manualActivation,
+        'p_expected_revision': edited.activationRevision,
+      };
+      if (online) {
+        final result = await _supabase.rpc<Map<String, dynamic>>(
+          'set_member_activation', params: params);
+        final confirmed = Member.fromJson(result);
+        edited = edited.copyWith(
+          manuallyDeactivated: confirmed.manuallyDeactivated,
+          activationRevision: confirmed.activationRevision,
+          isActive: confirmed.isActive,
+        );
+      } else {
+        await _queuePendingWrite('members', 'set_activation', params);
+        edited = edited.copyWith(manuallyDeactivated: !manualActivation);
+      }
+    }
     var persistedRemotely = false;
     if (online) {
       try {
         await _supabase
             .from(SupabaseConstants.tableMembers)
-            .update(edited.toJson())
+            .update(_memberDetailsPayload(edited.toJson()))
             .eq('id', edited.id);
         if (photoPathToDelete != null) {
           await deleteMemberPhoto(photoPathToDelete);
@@ -889,6 +972,17 @@ class DataSyncService extends ChangeNotifier {
       await _queueMemberUpdate(
         edited,
         photoPathToDelete: photoPathToDelete,
+      );
+    }
+    final latest = _members.where((m) => m.id == edited.id).firstOrNull;
+    if (latest != null && (manualActivation == null ||
+        latest.activationRevision > edited.activationRevision)) {
+      // A dialog may have opened before a renewal completed. Its profile fields
+      // must not restore that old manual hold in the local cache either.
+      edited = edited.copyWith(
+        manuallyDeactivated: latest.manuallyDeactivated,
+        activationRevision: latest.activationRevision,
+        deletedAt: latest.deletedAt,
       );
     }
     await _saveMemberLocally(edited, insertIfMissing: false);
@@ -1006,7 +1100,7 @@ class DataSyncService extends ChangeNotifier {
     Object? error,
   }) async {
     if (photoPathToDelete == null) {
-      await _queuePendingWrite('members', 'update', member.toJson(),
+      await _queuePendingWrite('members', 'update', _memberDetailsPayload(member.toJson()),
           error: error);
       return;
     }
@@ -1014,12 +1108,20 @@ class DataSyncService extends ChangeNotifier {
       'members',
       'update_with_photo_cleanup',
       {
-        'member': member.toJson(),
+        'member': _memberDetailsPayload(member.toJson()),
         'photo_path_to_delete': photoPathToDelete,
       },
       error: error,
     );
   }
+
+  Map<String, dynamic> _memberDetailsPayload(Map<String, dynamic> input) =>
+      Map<String, dynamic>.from(input)
+        ..remove('is_active')
+        ..remove('manually_deactivated')
+        ..remove('activation_revision')
+        ..remove('deleted_at')
+        ..remove('sync_version');
 
   Future<String> uploadMemberPhoto({
     required String memberId,
@@ -1379,23 +1481,19 @@ class DataSyncService extends ChangeNotifier {
           ? Payment.fromJson(
               Map<String, dynamic>.from(result['payment'] as Map))
           : null;
-      if (confirmedPayment == null ||
+      if (confirmedMembership.id != newMembership.id ||
+          confirmedMembership.memberId != memberId ||
+          confirmedMembership.gymId != gymId ||
+          confirmedPayment == null ||
+          confirmedPayment.id != payment.id ||
+          confirmedPayment.gymId != gymId ||
           confirmedPayment.membershipId != confirmedMembership.id ||
           confirmedPayment.amount != price ||
           confirmedPayment.paymentMethod != paymentMethod) {
         throw StateError('لم يؤكد الخادم الدفعة الأولية المرتبطة بالاشتراك.');
       }
 
-      _memberships = [
-        confirmedMembership,
-        ..._memberships.where((item) => item.id != confirmedMembership.id),
-      ];
-      _payments = [
-        confirmedPayment,
-        ..._payments.where((item) => item.id != confirmedPayment.id),
-      ];
-      await _persistMembershipAndPaymentCache();
-      notifyListeners();
+      await _acceptConfirmedMembership(result, confirmedMembership, confirmedPayment);
       return MembershipCreationResult(
           membership: confirmedMembership, isPending: false);
     } on PostgrestException catch (error) {
@@ -1416,6 +1514,25 @@ class DataSyncService extends ChangeNotifier {
       }
       rethrow;
     }
+  }
+
+  Future<void> _acceptConfirmedMembership(
+    Map<String, dynamic> result, Membership membership, Payment payment,
+  ) async {
+    final rawMember = result['member'];
+    final confirmedMember = rawMember is Map
+        ? Member.fromJson(Map<String, dynamic>.from(rawMember)) : null;
+    if (confirmedMember != null &&
+        (confirmedMember.id != membership.memberId ||
+         confirmedMember.gymId != membership.gymId)) {
+      throw StateError('لم يؤكد الخادم العضو المرتبط بالاشتراك.');
+    }
+    _memberships = [membership,
+      ..._memberships.where((item) => item.id != membership.id)];
+    _payments = [payment, ..._payments.where((item) => item.id != payment.id)];
+    await _persistMembershipAndPaymentCache();
+    if (confirmedMember != null) await _saveMemberLocally(confirmedMember);
+    notifyListeners();
   }
 
   bool _queuedMembershipOverlaps(PendingAction action, Membership proposed) {
@@ -1501,7 +1618,8 @@ class DataSyncService extends ChangeNotifier {
 
   Future<void> deleteMembership(String id) async {
     final now = DateTime.now();
-    _memberships = _memberships.where((m) => m.id != id).toList();
+    _memberships = _memberships.map((m) => m.id == id
+        ? m.copyWith(deletedAt: now, updatedAt: now) : m).toList();
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();

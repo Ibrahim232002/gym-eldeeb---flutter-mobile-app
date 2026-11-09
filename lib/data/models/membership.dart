@@ -1,3 +1,6 @@
+import '../../core/utils/gym_clock.dart';
+import 'member.dart';
+
 /// Membership model reflecting the public.memberships Supabase table
 class Membership {
   final String id;
@@ -31,7 +34,7 @@ class Membership {
   });
 
   bool get isExpired {
-    return daysRemainingAt(DateTime.now()) < 0;
+    return status == 'expired' || daysRemainingAt(GymClock.today()) < 0;
   }
 
   int daysRemainingAt(DateTime date) {
@@ -60,6 +63,7 @@ class Membership {
 
   bool overlapsActivePeriod(Membership other) {
     if (id == other.id ||
+        gymId != other.gymId ||
         memberId != other.memberId ||
         status != 'active' ||
         other.status != 'active' ||
@@ -162,10 +166,22 @@ List<Membership> expiringMembershipsWithinDays(
   Iterable<Membership> memberships,
   DateTime date, {
   int days = 7,
+  Iterable<Member>? members,
 }) {
   final allMemberships = memberships.toList(growable: false);
+  final membersById = members == null
+      ? null
+      : {for (final member in members) member.id: member};
 
   return allMemberships.where((membership) {
+    if (membersById != null) {
+      final member = membersById[membership.memberId];
+      if (member == null ||
+          member.deletedAt != null ||
+          member.gymId != membership.gymId) {
+        return false;
+      }
+    }
     if (!membership.isExpiringWithinDays(date, days: days)) {
       return false;
     }
@@ -199,4 +215,17 @@ List<Membership> expiringMembershipsWithinDays(
     return !hasLaterRenewal;
   }).toList();
 }
-//
+
+/// Offline projection of the database lifecycle rule, using confirmed records.
+/// A pending renewal is deliberately not part of [memberships].
+bool memberIsActiveOn(
+  Member member,
+  Iterable<Membership> memberships,
+  DateTime date,
+) =>
+    member.deletedAt == null &&
+    !member.manuallyDeactivated &&
+    memberships.any((membership) =>
+        membership.memberId == member.id &&
+        membership.gymId == member.gymId &&
+        membership.isEligibleOn(date));

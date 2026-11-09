@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +10,7 @@ import '../../auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme_controller.dart';
 import '../../core/utils/rtl_support.dart';
+import '../../core/utils/gym_clock.dart';
 import '../../core/services/data_sync_service.dart';
 import '../../core/services/whatsapp_service.dart';
 import '../../core/utils/top_snackbar.dart';
@@ -151,7 +153,43 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen>
+    with WidgetsBindingObserver {
+  Timer? _dayTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _visitedTabs.add(ref.read(selectedTabProvider));
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleDayRefresh();
+  }
+
+  void _scheduleDayRefresh() {
+    _dayTimer?.cancel();
+    _dayTimer = Timer(GymClock.untilNextDay() + const Duration(seconds: 1), () {
+      if (!mounted) return;
+      ref.read(dataSyncServiceProvider).refreshMembershipDay();
+      unawaited(ref.read(dataSyncServiceProvider).syncAll());
+      _scheduleDayRefresh();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(dataSyncServiceProvider).refreshMembershipDay();
+      unawaited(ref.read(dataSyncServiceProvider).syncAll());
+      _scheduleDayRefresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dayTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final Set<int> _visitedTabs = <int>{0};
 
@@ -452,7 +490,6 @@ class _DashboardOverviewTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
     final members = data.members;
-    final memberships = data.memberships;
     final payments = data.payments;
 
     final totalMembers = members.length;
@@ -460,8 +497,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
     final inactiveMembers = totalMembers - activeMembers;
 
     final now = DateTime.now();
-    final expiringSoonMemberships =
-        expiringMembershipsWithinDays(memberships, now);
+    final expiringSoonMemberships = data.expiringMemberships;
 
     final monthPayments = payments
         .where((payment) =>
@@ -787,7 +823,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                         fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   subtitle: Text(
-                    '${payment.paymentMethod == "cash" ? "نقدي" : "بطاقة/تحويل"} • ${RtlSupport.formatDate(payment.paidAt)}',
+                    'العضو: ${data.paymentMemberName(payment)}\nسجّل الدفعة: ${data.creatorName(payment.recordedBy)}\n${payment.paymentMethod == "cash" ? "نقدي" : "بطاقة/تحويل"} • ${RtlSupport.formatDate(payment.paidAt)}',
                     style: TextStyle(
                         fontSize: 11, color: context.appPalette.textSecondary),
                   ),
@@ -1197,7 +1233,7 @@ void _openMemberWhatsapp(BuildContext context, WidgetRef ref, Member member) {
     backgroundColor: context.appPalette.surfaceCard,
     builder: (sheetContext) => Directionality(
       textDirection: ui.TextDirection.rtl,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1578,7 +1614,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
     _nameController = TextEditingController(text: widget.member.fullName);
     _phoneController = TextEditingController(text: widget.member.phone ?? '');
     _notesController = TextEditingController(text: widget.member.notes ?? '');
-    _isActive = widget.member.isActive;
+    _isActive = !widget.member.manuallyDeactivated;
     _joinDate = widget.member.joinDate;
   }
 
@@ -1609,7 +1645,6 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
             ? _notesController.text.trim()
             : null,
         joinDate: _joinDate,
-        isActive: _isActive,
       );
       await service.validateMember(
         candidate: updatedMember,
@@ -1634,6 +1669,8 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
           clearPhotoPath: _removePhoto,
         ),
         photoPathToDelete: oldPhotoPath != nextPhotoPath ? oldPhotoPath : null,
+        manualActivation: _isActive != !widget.member.manuallyDeactivated
+            ? _isActive : null,
       );
 
       if (!mounted) return;
@@ -1757,7 +1794,8 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
                 ),
                 const SizedBox(height: 12),
                 SwitchListTile(
-                  title: const Text('حالة الحساب نشط'),
+                  title: const Text('السماح بتفعيل العضو'),
+                  subtitle: const Text('يكون العضو نشطًا عند وجود اشتراك ساري. التجديد يلغي الإيقاف اليدوي.'),
                   value: _isActive,
                   activeThumbColor: context.appPalette.primary,
                   contentPadding: EdgeInsets.zero,
@@ -1795,6 +1833,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
 
+    final currentMember = data.members.where((m) => m.id == member.id).firstOrNull;
     final memberMemberships =
         data.memberships.where((m) => m.memberId == member.id).toList();
     final memberPayments = data.payments.where((p) {
@@ -1839,9 +1878,9 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                             Text(member.fullName,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 17)),
-                            Text(member.isActive ? 'عضو نشط' : 'عضو غير نشط',
+                            Text(currentMember?.isActive == true ? 'عضو نشط' : 'عضو غير نشط',
                                 style: TextStyle(
-                                    color: member.isActive
+                                    color: currentMember?.isActive == true
                                         ? context.appPalette.success
                                         : context.appPalette.error,
                                     fontSize: 11,
@@ -1935,7 +1974,8 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
               ...memberMemberships.map((m) {
                 final plan =
                     data.plans.where((p) => p.id == m.planId).firstOrNull;
-                final expired = m.isExpired;
+                final expired = m.isExpired || m.status == 'cancelled';
+                final eligible = m.isEligibleOn(GymClock.today());
                 return Card(
                   color: context.appPalette.surface,
                   margin: const EdgeInsets.only(bottom: 8),
@@ -1954,7 +1994,8 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                             : context.appPalette.success.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(expired ? 'منتهي' : 'نشط',
+                      child: Text(m.status == 'cancelled' ? 'ملغى'
+                          : expired ? 'منتهي' : eligible ? 'نشط' : 'قادم',
                           style: TextStyle(
                               color: expired
                                   ? context.appPalette.error
@@ -2017,7 +2058,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                     onPressed: () {
                       showDialog<void>(
                         context: context,
-                        builder: (_) => _EditMemberDialog(member: member),
+                        builder: (_) => _EditMemberDialog(member: currentMember ?? member),
                       );
                     },
                   ),
@@ -2575,8 +2616,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
       return matchesMember || matchesPlan;
     }).toList();
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = GymClock.today();
 
     return Column(
       children: [
@@ -2651,7 +2691,7 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                       membership.startDate.month,
                       membership.startDate.day,
                     ).isAfter(DateTime.utc(today.year, today.month, today.day));
-                    final expired = !startsInFuture && membership.isExpired;
+                    final expired = membership.isExpired;
                     final cancelled = membership.status == 'cancelled';
                     final statusColor = cancelled || expired
                         ? context.appPalette.error
@@ -2660,10 +2700,10 @@ class _MembershipsTabState extends ConsumerState<_MembershipsTab> {
                             : context.appPalette.success;
                     final statusLabel = cancelled
                         ? 'ملغى'
-                        : startsInFuture
-                            ? 'قادم'
-                            : expired
-                                ? 'منتهي'
+                        : expired
+                            ? 'منتهي'
+                            : startsInFuture
+                                ? 'قادم'
                                 : 'ساري';
 
                     return Card(
@@ -2840,8 +2880,8 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
     final membersById = {for (final member in data.members) member.id: member};
-    final today = DateTime.now();
-    final memberships = expiringMembershipsWithinDays(data.memberships, today)
+    final today = GymClock.today();
+    final memberships = data.expiringMemberships
       ..sort((a, b) => a.endDate.compareTo(b.endDate));
 
     if (memberships.isEmpty && data.syncStatus == SyncStatus.syncing) {
@@ -2910,7 +2950,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
             itemCount: memberships.length,
             itemBuilder: (context, index) {
               final membership = memberships[index];
-              final member = membersById[membership.memberId];
+              final member = membersById[membership.memberId]!;
               final remainingDays = membership.daysRemainingAt(today);
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -2924,7 +2964,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
                     ),
                   ),
                   title: Text(
-                    member?.fullName ?? 'عضو محذوف',
+                    member.fullName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -2945,7 +2985,7 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (member?.phone?.trim().isNotEmpty == true)
+                      if (member.phone?.trim().isNotEmpty == true)
                         IconButton(
                           constraints: const BoxConstraints.tightFor(
                               width: 36, height: 40),
@@ -2957,10 +2997,9 @@ class _ExpiringMembershipsTab extends ConsumerWidget {
                             color: context.appPalette.success,
                           ),
                           onPressed: () =>
-                              _openMemberWhatsapp(context, ref, member!),
+                              _openMemberWhatsapp(context, ref, member),
                         ),
-                      if (member != null)
-                        IconButton(
+                      IconButton(
                           constraints: const BoxConstraints.tightFor(
                               width: 36, height: 40),
                           padding: EdgeInsets.zero,
@@ -3231,7 +3270,7 @@ class _CreateMembershipDialogState
   void initState() {
     super.initState();
     _selectedMemberId = widget.preSelectedMemberId;
-    _startDate = DateUtils.dateOnly(DateTime.now());
+    _startDate = GymClock.today();
     _endDate = MembershipPlan.endDateForDuration(_startDate, 30);
   }
 
@@ -3582,7 +3621,15 @@ class _PaymentsTab extends ConsumerWidget {
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
+                                      'العضو: ${data.paymentMemberName(payment)}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 12)),
+                                  const SizedBox(height: 3),
+                                  Text(
                                       'سجّل الدفعة: ${data.creatorName(payment.recordedBy)}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                           fontSize: 11,
                                           color: context.appPalette.textMuted)),

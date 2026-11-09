@@ -138,3 +138,6 @@ Thumbs.db
 # Android build
 android/.gradle/
 android/app/build/
+
+# Supabase CLI local metadata
+supabase/.temp/

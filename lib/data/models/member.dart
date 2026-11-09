@@ -8,6 +8,8 @@ class Member {
   final String? photoPath;
   final DateTime joinDate;
   final bool isActive;
+  final bool manuallyDeactivated;
+  final int activationRevision;
   final String? createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -24,13 +26,15 @@ class Member {
     this.photoPath,
     required this.joinDate,
     this.isActive = true,
+    bool? manuallyDeactivated,
+    this.activationRevision = 0,
     this.createdBy,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
     this.syncVersion = 1,
     this.legacyRef,
-  });
+  }) : manuallyDeactivated = manuallyDeactivated ?? !isActive;
 
   factory Member.fromJson(Map<String, dynamic> json) {
     return Member(
@@ -44,6 +48,8 @@ class Member {
           ? DateTime.parse(json['join_date'] as String)
           : DateTime.now(),
       isActive: json['is_active'] as bool? ?? true,
+      manuallyDeactivated: json['manually_deactivated'] as bool?,
+      activationRevision: json['activation_revision'] as int? ?? 0,
       createdBy: json['created_by'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
@@ -69,6 +75,8 @@ class Member {
       'photo_path': photoPath,
       'join_date': joinDate.toIso8601String().substring(0, 10),
       'is_active': isActive,
+      'manually_deactivated': manuallyDeactivated,
+      'activation_revision': activationRevision,
       'created_by': createdBy,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -88,6 +96,8 @@ class Member {
     bool clearPhotoPath = false,
     DateTime? joinDate,
     bool? isActive,
+    bool? manuallyDeactivated,
+    int? activationRevision,
     String? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -104,6 +114,8 @@ class Member {
       photoPath: clearPhotoPath ? null : photoPath ?? this.photoPath,
       joinDate: joinDate ?? this.joinDate,
       isActive: isActive ?? this.isActive,
+      manuallyDeactivated: manuallyDeactivated ?? this.manuallyDeactivated,
+      activationRevision: activationRevision ?? this.activationRevision,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
