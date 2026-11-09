@@ -229,3 +229,76 @@ bool memberIsActiveOn(
         membership.memberId == member.id &&
         membership.gymId == member.gymId &&
         membership.isEligibleOn(date));
+
+/// Returns the single membership that should represent each member in the
+/// operational log: current coverage first, otherwise the next paid period,
+/// otherwise the most recent expired period. Older renewals remain in the
+/// database and payment history; they are not duplicated in the main log.
+List<Membership> membershipLogEntries(
+  Iterable<Membership> memberships,
+  DateTime date, {
+  Iterable<Member>? members,
+}) {
+  final today = DateTime.utc(date.year, date.month, date.day);
+  final membersById = members == null
+      ? null
+      : {for (final member in members) member.id: member};
+  final grouped = <String, List<Membership>>{};
+
+  for (final membership in memberships) {
+    if (membership.deletedAt != null || membership.status == 'cancelled') {
+      continue;
+    }
+    if (membersById != null) {
+      final member = membersById[membership.memberId];
+      if (member == null ||
+          member.deletedAt != null ||
+          member.gymId != membership.gymId) {
+        continue;
+      }
+    }
+    final key = '${membership.gymId}:${membership.memberId}';
+    grouped.putIfAbsent(key, () => <Membership>[]).add(membership);
+  }
+
+  final result = <Membership>[];
+  for (final records in grouped.values) {
+    final current = records.where((item) => item.isEligibleOn(today)).toList()
+      ..sort((a, b) {
+        final start = b.startDate.compareTo(a.startDate);
+        return start != 0 ? start : b.createdAt.compareTo(a.createdAt);
+      });
+    if (current.isNotEmpty) {
+      result.add(current.first);
+      continue;
+    }
+
+    final upcoming = records.where((item) {
+      if (item.status != 'active' || item.endDate.isBefore(today)) return false;
+      final start = DateTime.utc(
+          item.startDate.year, item.startDate.month, item.startDate.day);
+      return start.isAfter(today);
+    }).toList()
+      ..sort((a, b) {
+        final start = a.startDate.compareTo(b.startDate);
+        return start != 0 ? start : a.createdAt.compareTo(b.createdAt);
+      });
+    if (upcoming.isNotEmpty) {
+      result.add(upcoming.first);
+      continue;
+    }
+
+    final expired = records.where((item) =>
+        item.status == 'expired' || item.daysRemainingAt(today) < 0).toList()
+      ..sort((a, b) {
+        final end = b.endDate.compareTo(a.endDate);
+        return end != 0 ? end : b.createdAt.compareTo(a.createdAt);
+      });
+    if (expired.isNotEmpty) {
+      result.add(expired.first);
+    }
+  }
+
+  result.sort((a, b) => b.startDate.compareTo(a.startDate));
+  return result;
+}
