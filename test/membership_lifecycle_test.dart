@@ -202,6 +202,51 @@ void main() {
     expect(memberships, hasLength(3));
   });
 
+  test('membership log hides superseded history but keeps the latest expired period', () {
+    final old = _membership(
+      id: 'old',
+      start: _today.subtract(const Duration(days: 30)),
+      end: _today.subtract(const Duration(days: 1)),
+      status: 'expired',
+    );
+    final renewed = _membership(
+      id: 'renewed',
+      start: _today,
+      end: _today.add(const Duration(days: 29)),
+    );
+    expect(
+      membershipLogEntries([old, renewed], _today, members: [_member()])
+          .map((item) => item.id),
+      ['renewed'],
+    );
+    expect(
+      membershipLogEntries([old], _today, members: [_member()])
+          .map((item) => item.id),
+      ['old'],
+    );
+
+    final future = _membership(
+      id: 'future',
+      start: _today.add(const Duration(days: 5)),
+      end: _today.add(const Duration(days: 34)),
+    );
+    expect(
+      membershipLogEntries([old, future], _today, members: [_member()])
+          .map((item) => item.id),
+      ['future'],
+    );
+    expect(
+      membershipLogEntries([renewed, future], _today, members: [_member()])
+          .map((item) => item.id),
+      ['renewed'],
+    );
+    expect(
+      membershipLogEntries([old], _today,
+          members: [_member(deleted: _today)]),
+      isEmpty,
+    );
+  });
+
   for (final manual in [false, true]) {
     test(
         'confirmed renewal immediately activates (manual=$manual) and survives restart',
