@@ -1981,14 +1981,28 @@ void main() {
 
     final today = GymClock.today();
     final initialComparisonDate = DateTime(today.year, today.month - 1, 1);
-    final comparisonMonthField =
-        tester.widget<DropdownButtonFormField<int>>(
-      find.byKey(
-        ValueKey<String>(
-          'comparison-month-${initialComparisonDate.year}-${initialComparisonDate.month}',
-        ),
+    final comparisonMonthWidget = find.byKey(
+      ValueKey<String>(
+        'comparison-month-${initialComparisonDate.year}-${initialComparisonDate.month}',
       ),
     );
+    final comparisonDropdown = tester.widget<DropdownButton<int>>(
+      find.descendant(
+        of: comparisonMonthWidget,
+        matching: find.byType(DropdownButton<int>),
+      ),
+    );
+    final availableComparisonMonths = comparisonDropdown.items!
+        .map((item) => item.value)
+        .toList();
+    expect(availableComparisonMonths, contains(initialComparisonDate.month));
+    expect(availableComparisonMonths, isNot(contains(today.month)));
+    if (today.month < 12) {
+      expect(availableComparisonMonths, isNot(contains(today.month + 1)));
+    }
+
+    final comparisonMonthField =
+        tester.widget<DropdownButtonFormField<int>>(comparisonMonthWidget);
     comparisonMonthField.onChanged!(1);
     await tester.pumpAndSettle();
 
@@ -2010,7 +2024,7 @@ void main() {
 
     expect(find.text('مقارنة مع يناير ${today.year - 2}'), findsOneWidget);
     final annualComparison = find.text(
-      'مقارنة مع سنة ${GymClock.today().year - 1} لحد نفس اليوم',
+      'مقارنة إجمالي السنة مع ${today.year - 2}',
     );
     await tester.scrollUntilVisible(
       annualComparison,
