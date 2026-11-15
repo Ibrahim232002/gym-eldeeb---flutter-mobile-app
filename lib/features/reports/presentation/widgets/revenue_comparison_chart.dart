@@ -388,7 +388,7 @@ class _RevenueChartPainter extends CustomPainter {
             : scaled <= 5
                 ? 5
                 : 10;
-    return step * magnitude;
+    return (step * magnitude).toDouble();
   }
 
   String _formatAxisValue(double value) {
