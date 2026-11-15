@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'revenue_comparison_bar_item.dart';
+
 class RevenueChartPainter extends CustomPainter {
   final List<RevenueComparisonBarItem> items;
   final Color currentColor;
@@ -70,7 +72,7 @@ class RevenueChartPainter extends CustomPainter {
     }
 
     canvas.drawLine(
-      Offset(_left, _top),
+      const Offset(_left, _top),
       Offset(_left, _top + plotHeight),
       axisPaint,
     );
@@ -124,7 +126,7 @@ class RevenueChartPainter extends CustomPainter {
           centers[index] - barWidth / 2,
           _top + plotHeight - barHeight,
           barWidth,
-          math.max(2.0, barHeight).toDouble(),
+          barHeight < 2.0 ? 2.0 : barHeight,
         ),
         const Radius.circular(5),
       );
