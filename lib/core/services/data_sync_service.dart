@@ -740,6 +740,34 @@ class DataSyncService extends ChangeNotifier {
     }
   }
 
+  /// Payments are financial history: never let the REST row limit silently
+  /// truncate monthly or annual revenue reports.
+  Future<List<Map<String, dynamic>>> _fetchRemotePayments(
+    String gymId,
+  ) async {
+    const pageSize = 500;
+    final payments = <Map<String, dynamic>>[];
+
+    for (var offset = 0;; offset += pageSize) {
+      final page = await _supabase
+          .from(SupabaseConstants.tablePayments)
+          .select()
+          .eq('gym_id', gymId)
+          .order('paid_at', ascending: false)
+          .order('id', ascending: true)
+          .range(offset, offset + pageSize - 1);
+
+      payments.addAll(
+        (page as List).map(
+          (row) => Map<String, dynamic>.from(row as Map),
+        ),
+      );
+      if (page.length < pageSize) break;
+    }
+
+    return payments;
+  }
+
   Future<void> _fetchRemoteData(String gymId) async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -761,11 +789,7 @@ class DataSyncService extends ChangeNotifier {
           .select()
           .eq('gym_id', gymId)
           .order('start_date', ascending: false),
-      _supabase
-          .from(SupabaseConstants.tablePayments)
-          .select()
-          .eq('gym_id', gymId)
-          .order('paid_at', ascending: false),
+      _fetchRemotePayments(gymId),
     ]);
 
     // Parse the full snapshot before replacing any in-memory cache. If one
@@ -779,8 +803,8 @@ class DataSyncService extends ChangeNotifier {
     final memberships = (responses[2] as List)
         .map((json) => Membership.fromJson(json as Map<String, dynamic>))
         .toList();
-    final payments = (responses[3] as List)
-        .map((json) => Payment.fromJson(json as Map<String, dynamic>))
+    final payments = (responses[3] as List<Map<String, dynamic>>)
+        .map(Payment.fromJson)
         .toList();
 
     // Persist the complete fetched snapshot before publishing it to consumers.
