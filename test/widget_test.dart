@@ -1996,9 +1996,14 @@ void main() {
         .map((item) => item.value)
         .toList();
     expect(availableComparisonMonths, contains(initialComparisonDate.month));
-    expect(availableComparisonMonths, isNot(contains(today.month)));
-    if (today.month < 12) {
-      expect(availableComparisonMonths, isNot(contains(today.month + 1)));
+    if (initialComparisonDate.year == today.year) {
+      expect(availableComparisonMonths, isNot(contains(today.month)));
+      if (today.month < 12) {
+        expect(availableComparisonMonths, isNot(contains(today.month + 1)));
+      }
+    } else {
+      expect(availableComparisonMonths, contains(today.month));
+      expect(availableComparisonMonths, contains(12));
     }
 
     final comparisonMonthField =
