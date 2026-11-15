@@ -212,7 +212,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'الأرقام حتى اليوم $currentDay فقط، والمقارنات تستخدم نفس عدد الأيام من الفترات السابقة.',
+              'الأرقام حتى اليوم $currentDay فقط، والمقارنات تستخدم '
+                  'نفس عدد الأيام من الفترات السابقة.',
               style: TextStyle(
                 color: context.appPalette.textMuted,
                 fontSize: 11,
@@ -222,7 +223,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 16),
         _comparisonCard(
           context,
-          title: 'مقارنة بالشهر السابق (${_monthName(previousMonthDate.month)} ${previousMonthDate.year})',
+          title: 'مقارنة بالشهر السابق '
+              '(${_monthName(previousMonthDate.month)} ${previousMonthDate.year})',
           comparison: RevenueReportCalculator.compare(
             monthTotal,
             previousMonthTotal,
@@ -241,7 +243,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         RevenueComparisonChart(
           title: 'الرسم البياني لمقارنة الشهر',
           currentLabel: '${_monthName(_selectedMonth)} $_selectedYear',
-          previousLabel: '${_monthName(previousMonthDate.month)} ${previousMonthDate.year}',
+          previousLabel: '${_monthName(previousMonthDate.month)} '
+              '${previousMonthDate.year}',
           items: [
             RevenueComparisonBarItem(
               label: 'إجمالي الإيراد المحصّل',
@@ -263,7 +266,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 10),
         _comparisonCard(
           context,
-          title: 'مقارنة سنوية مع ${_selectedYear - 1}${_selectedYear == currentYear ? ' (نفس المدة)' : ''}',
+          title: 'مقارنة سنوية مع ${_selectedYear - 1}'
+              '${_selectedYear == currentYear ? ' (نفس المدة)' : ''}',
           comparison: RevenueReportCalculator.compare(
             annualTotal,
             previousYearTotal,
@@ -423,7 +427,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         ? comparison.current.revenue > 0
             ? 'إيراد جديد؛ لا توجد قيمة سابقة لحساب النسبة'
             : 'لا توجد إيرادات في الفترتين'
-        : '${comparison.percentageChange! > 0 ? '+' : ''}${comparison.percentageChange!.toStringAsFixed(1)}%';
+        : '${comparison.percentageChange! > 0 ? '+' : ''}'
+            '${comparison.percentageChange!.toStringAsFixed(1)}%';
 
     return Card(
       color: context.appPalette.surfaceCard,
@@ -454,7 +459,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
                   ),
                 ),
                 Text(
-                  '${comparison.difference > 0 ? '+' : ''}${RtlSupport.formatEgp(comparison.difference)}',
+                  '${comparison.difference > 0 ? '+' : ''}'
+                      '${RtlSupport.formatEgp(comparison.difference)}',
                   style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
@@ -465,7 +471,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             ),
             const SizedBox(height: 5),
             Text(
-              'الحالي: ${RtlSupport.formatEgp(comparison.current.revenue)}  •  السابق: ${RtlSupport.formatEgp(comparison.previous.revenue)}',
+              'الحالي: ${RtlSupport.formatEgp(comparison.current.revenue)}  •  السابق: '
+                  '${RtlSupport.formatEgp(comparison.previous.revenue)}',
               style: TextStyle(
                 color: context.appPalette.textMuted,
                 fontSize: 10,
