@@ -1154,7 +1154,7 @@ class DataSyncService extends ChangeNotifier {
           photoBytes,
           fileOptions: const FileOptions(
             contentType: 'image/jpeg',
-            upsert: true,
+            upsert: false,
           ),
         );
     return path;
