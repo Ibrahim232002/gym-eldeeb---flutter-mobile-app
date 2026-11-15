@@ -80,8 +80,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       throughDay: monthThroughDay,
     );
 
-    final comparisonDate = DateTime(_comparisonYear, _comparisonMonth, 1);
-    final isComparisonCurrentMonth =
+        final isComparisonCurrentMonth =
         _comparisonYear == currentYear && _comparisonMonth == currentMonth;
     final comparisonTotal = RevenueReportCalculator.forMonth(
       payments,
@@ -152,7 +151,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           children: [
             Expanded(
               child: DropdownButtonFormField<int>(
-                key: const ValueKey<String>('report-year'),
+                key: ValueKey<String>('report-year-$_selectedYear'),
                 initialValue: _selectedYear,
                 isExpanded: true,
                 decoration: const InputDecoration(
@@ -181,7 +180,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: DropdownButtonFormField<int>(
-                key: const ValueKey<String>('report-month'),
+                key: ValueKey<String>('report-month-$_selectedYear-$_selectedMonth'),
                 initialValue: _selectedMonth,
                 isExpanded: true,
                 decoration: const InputDecoration(
