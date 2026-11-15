@@ -34,6 +34,14 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
   }
 
   void _keepComparisonDifferentFromSelectedPeriod() {
+    final today = GymClock.today();
+    final lastAvailableMonth =
+        _comparisonYear == today.year ? today.month : 12;
+
+    if (_comparisonMonth > lastAvailableMonth) {
+      _comparisonMonth = lastAvailableMonth;
+    }
+
     if (_comparisonYear == _selectedYear &&
         _comparisonMonth == _selectedMonth) {
       final fallback = DateTime(_selectedYear, _selectedMonth - 1, 1);
@@ -100,12 +108,12 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       throughMonth: annualThroughMonth,
       throughDay: annualThroughDay,
     );
-    final previousYearTotal = RevenueReportCalculator.forYear(
+    final comparisonYearTotal = RevenueReportCalculator.forYear(
       payments,
       gymId: gymId,
-      year: _selectedYear - 1,
-      throughMonth: annualThroughMonth,
-      throughDay: annualThroughDay,
+      year: _comparisonYear,
+      throughMonth: _comparisonYear == currentYear ? currentMonth : null,
+      throughDay: _comparisonYear == currentYear ? currentDay : null,
     );
     final annualMonths = RevenueReportCalculator.monthlyTotals(
       payments,
@@ -251,14 +259,14 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
                 ),
                 items: [
                   for (var month = 1; month <= 12; month++)
-                    DropdownMenuItem<int>(
-                      value: month,
-                      enabled: (_comparisonYear != _selectedYear ||
-                              month != _selectedMonth) &&
-                          (_comparisonYear != currentYear ||
-                              month <= currentMonth),
-                      child: Text(_monthName(month)),
-                    ),
+                    if ((_comparisonYear != _selectedYear ||
+                            month != _selectedMonth) &&
+                        (_comparisonYear != currentYear ||
+                            month <= currentMonth))
+                      DropdownMenuItem<int>(
+                        value: month,
+                        child: Text(_monthName(month)),
+                      ),
                 ],
                 onChanged: (month) {
                   if (month == null) return;
@@ -328,16 +336,28 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           icon: Icons.account_balance_wallet_rounded,
         ),
         const SizedBox(height: 10),
-        _comparisonCard(
-          context,
-          title: _selectedYear == currentYear
-              ? 'مقارنة مع سنة ${_selectedYear - 1} لحد نفس اليوم'
-              : 'مقارنة مع سنة ${_selectedYear - 1}',
-          comparison: RevenueReportCalculator.compare(
-            annualTotal,
-            previousYearTotal,
+        if (_comparisonYear != _selectedYear)
+          _comparisonCard(
+            context,
+            title: _comparisonYear == currentYear
+                ? 'مقارنة إجمالي السنة مع $_comparisonYear لحد النهارده'
+                : 'مقارنة إجمالي السنة مع $_comparisonYear',
+            comparison: RevenueReportCalculator.compare(
+              annualTotal,
+              comparisonYearTotal,
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+              'اختار سنة مختلفة عشان تقارن إجمالي السنة.',
+              style: TextStyle(
+                color: context.appPalette.textMuted,
+                fontSize: 11,
+              ),
+            ),
           ),
-        ),
         const SizedBox(height: 10),
         RevenueComparisonChart(
           title: 'الإيرادات شهر بشهر',
