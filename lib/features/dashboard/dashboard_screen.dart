@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 
 import '../../auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
