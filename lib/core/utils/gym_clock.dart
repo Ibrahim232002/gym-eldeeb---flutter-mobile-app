@@ -11,6 +11,10 @@ class GymClock {
     return tz.getLocation('Africa/Cairo');
   }
 
+  /// Converts an instant to the gym's business timezone (Africa/Cairo).
+  static tz.TZDateTime inCairo(DateTime instant) =>
+      tz.TZDateTime.from(instant, _cairo);
+
   static DateTime today([DateTime? instant]) {
     final cairo = tz.TZDateTime.from(instant ?? DateTime.now(), _cairo);
     return DateTime.utc(cairo.year, cairo.month, cairo.day);
