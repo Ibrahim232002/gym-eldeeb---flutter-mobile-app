@@ -1981,12 +1981,15 @@ void main() {
 
     final today = GymClock.today();
     final initialComparisonDate = DateTime(today.year, today.month - 1, 1);
-    final comparisonMonthKey = ValueKey<String>(
-      'comparison-month-${initialComparisonDate.year}-${initialComparisonDate.month}',
+    final comparisonMonthField =
+        tester.widget<DropdownButtonFormField<int>>(
+      find.byKey(
+        ValueKey<String>(
+          'comparison-month-${initialComparisonDate.year}-${initialComparisonDate.month}',
+        ),
+      ),
     );
-    await tester.tap(find.byKey(comparisonMonthKey));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('يناير').last);
+    comparisonMonthField.onChanged!(1);
     await tester.pumpAndSettle();
 
     expect(
@@ -1994,12 +1997,15 @@ void main() {
       findsOneWidget,
     );
 
-    final comparisonYearKey = ValueKey<String>(
-      'comparison-year-${initialComparisonDate.year}',
+    final comparisonYearField =
+        tester.widget<DropdownButtonFormField<int>>(
+      find.byKey(
+        ValueKey<String>(
+          'comparison-year-${initialComparisonDate.year}',
+        ),
+      ),
     );
-    await tester.tap(find.byKey(comparisonYearKey));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('${today.year - 2}').last);
+    comparisonYearField.onChanged!(today.year - 2);
     await tester.pumpAndSettle();
 
     expect(find.text('مقارنة مع يناير ${today.year - 2}'), findsOneWidget);
