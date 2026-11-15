@@ -1948,8 +1948,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(DropdownButtonFormField<int>), findsNWidgets(2));
-    expect(find.text('مقارنة سنوية مع ' +
-        (GymClock.today().year - 1).toString()), findsOneWidget);
+    final annualComparison = find.text(
+      'مقارنة سنوية مع ${GymClock.today().year - 1} (نفس المدة)',
+    );
+    await tester.scrollUntilVisible(
+      annualComparison,
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(annualComparison, findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('الرسم البياني لمقارنة الشهر'),
       240,
