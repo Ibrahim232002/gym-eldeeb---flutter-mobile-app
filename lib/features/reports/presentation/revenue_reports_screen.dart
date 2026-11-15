@@ -90,13 +90,6 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       throughDay: isComparisonCurrentMonth ? currentDay : null,
     );
 
-    final sameMonthLastYear = RevenueReportCalculator.forMonth(
-      payments,
-      gymId: gymId,
-      year: _selectedYear - 1,
-      month: _selectedMonth,
-    );
-
     final annualThroughMonth =
         _selectedYear == currentYear ? currentMonth : null;
     final annualThroughDay = _selectedYear == currentYear ? currentDay : null;
@@ -306,15 +299,6 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           comparison: RevenueReportCalculator.compare(
             monthTotal,
             comparisonTotal,
-          ),
-        ),
-        const SizedBox(height: 10),
-        _comparisonCard(
-          context,
-          title: 'مقارنة بنفس الشهر من سنة ${_selectedYear - 1}',
-          comparison: RevenueReportCalculator.compare(
-            monthTotal,
-            sameMonthLastYear,
           ),
         ),
         const SizedBox(height: 10),
