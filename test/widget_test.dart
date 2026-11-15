@@ -1270,6 +1270,49 @@ void main() {
     });
   });
 
+  test('member photo paths are scoped to their owning member', () {
+    expect(
+      memberPhotoPathBelongsToMember(
+        gymId: 'gym-1',
+        memberId: 'member-1',
+        path: 'gym-1/member-1.jpg',
+      ),
+      isTrue,
+    );
+    expect(
+      memberPhotoPathBelongsToMember(
+        gymId: 'gym-1',
+        memberId: 'member-1',
+        path: 'gym-1/member-1-550e8400-e29b-41d4-a716-446655440000.jpeg',
+      ),
+      isTrue,
+    );
+    expect(
+      memberPhotoPathBelongsToMember(
+        gymId: 'gym-1',
+        memberId: 'member-1',
+        path: 'gym-1/member-2.jpg',
+      ),
+      isFalse,
+    );
+    expect(
+      memberPhotoPathBelongsToMember(
+        gymId: 'gym-1',
+        memberId: 'member-1',
+        path: 'gym-2/member-1.jpg',
+      ),
+      isFalse,
+    );
+    expect(
+      memberPhotoPathBelongsToMember(
+        gymId: 'gym-1',
+        memberId: 'member-1',
+        path: 'gym-1/member-1-unrelated.jpg',
+      ),
+      isFalse,
+    );
+  });
+
   test('member photo deletion rejects paths outside the active gym', () async {
     SharedPreferences.setMockInitialValues({});
     final supabase = SupabaseClient('https://example.supabase.co', 'test-key');
@@ -1806,6 +1849,7 @@ void main() {
           body: Center(
             child: MemberPhotoAvatar(
               gymId: 'gym-1',
+              memberId: 'member-1',
               fullName: 'عضو الصورة',
               photoBytes: photo,
             ),
