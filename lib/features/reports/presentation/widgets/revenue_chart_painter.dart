@@ -10,7 +10,7 @@ class RevenueChartPainter extends CustomPainter {
   final Color labelColor;
   final bool isYearlyTrend;
 
-  const _RevenueChartPainter({
+  const RevenueChartPainter({
     required this.items,
     required this.currentColor,
     required this.previousColor,
@@ -297,7 +297,7 @@ class RevenueChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RevenueChartPainter oldDelegate) {
+  bool shouldRepaint(covariant RevenueChartPainter oldDelegate) {
     return oldDelegate.items != items ||
         oldDelegate.currentColor != currentColor ||
         oldDelegate.previousColor != previousColor ||
