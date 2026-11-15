@@ -67,32 +67,20 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
     );
 
     final previousMonthDate = DateTime(_selectedYear, _selectedMonth - 1, 1);
-    final previousMonthDays = DateUtils.getDaysInMonth(
-      previousMonthDate.year,
-      previousMonthDate.month,
-    );
-    final previousMonthDay = isCurrentMonth
-        ? (currentDay < previousMonthDays ? currentDay : previousMonthDays)
-        : null;
+    // Compare the partial current month with the entire previous month.
+    // The same month from last year is also counted in full.
     final previousMonthTotal = RevenueReportCalculator.forMonth(
       payments,
       gymId: gymId,
       year: previousMonthDate.year,
       month: previousMonthDate.month,
-      throughDay: previousMonthDay,
     );
 
-    final previousYearDays =
-        DateUtils.getDaysInMonth(_selectedYear - 1, _selectedMonth);
-    final previousYearDay = isCurrentMonth
-        ? (currentDay < previousYearDays ? currentDay : previousYearDays)
-        : null;
     final sameMonthLastYear = RevenueReportCalculator.forMonth(
       payments,
       gymId: gymId,
       year: _selectedYear - 1,
       month: _selectedMonth,
-      throughDay: previousYearDay,
     );
 
     final annualThroughMonth =
@@ -136,7 +124,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'تابع الإيرادات المحصّلة حسب تاريخ استلام الدفع',
+          'هنا هتلاقي الفلوس اللي اتحصلت فعلًا من الجيم.',
           style: TextStyle(
             color: context.appPalette.textSecondary,
             fontSize: 12,
@@ -203,17 +191,16 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           context,
           title: 'إيراد ${_monthName(_selectedMonth)} $_selectedYear',
           amount: monthTotal.revenue,
-          details: '${monthTotal.paymentCount} دفعة محسوبة • '
-              '${monthTotal.cancelledCount} دفعة ملغاة '
-              '(${RtlSupport.formatEgp(monthTotal.cancelledAmount)}) مستبعدة',
+          details: '${monthTotal.paymentCount} دفعة متسجلة • '
+              '${monthTotal.cancelledCount} دفعة ملغية '
+              '(${RtlSupport.formatEgp(monthTotal.cancelledAmount)}) مش داخلة في الحساب',
           icon: Icons.payments_rounded,
         ),
         if (isCurrentMonth)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'الأرقام حتى اليوم $currentDay فقط، والمقارنات تستخدم '
-                  'نفس عدد الأيام من الفترات السابقة.',
+              'الأرقام لحد يوم $currentDay، وبنقارنها بالشهر اللي فات كامل.',
               style: TextStyle(
                 color: context.appPalette.textMuted,
                 fontSize: 11,
@@ -233,7 +220,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 10),
         _comparisonCard(
           context,
-          title: 'مقارنة بنفس الشهر السنة السابقة (${_selectedYear - 1})',
+          title: 'مقارنة بنفس الشهر في سنة ${_selectedYear - 1}',
           comparison: RevenueReportCalculator.compare(
             monthTotal,
             sameMonthLastYear,
@@ -241,7 +228,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         ),
         const SizedBox(height: 10),
         RevenueComparisonChart(
-          title: 'الرسم البياني لمقارنة الشهر',
+          title: 'دخل الشهر ده والشهر اللي فات',
           currentLabel: '${_monthName(_selectedMonth)} $_selectedYear',
           previousLabel: '${_monthName(previousMonthDate.month)} '
               '${previousMonthDate.year}',
@@ -257,17 +244,18 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         _summaryCard(
           context,
           title: _selectedYear == currentYear
-              ? 'إجمالي إيرادات $_selectedYear حتى الآن'
+              ? 'إجمالي إيرادات $_selectedYear لحد دلوقتي'
               : 'إجمالي إيرادات سنة $_selectedYear',
           amount: annualTotal.revenue,
-          details: '${annualTotal.paymentCount} دفعة محسوبة خلال الفترة',
+          details: '${annualTotal.paymentCount} دفعة متسجلة خلال الفترة',
           icon: Icons.account_balance_wallet_rounded,
         ),
         const SizedBox(height: 10),
         _comparisonCard(
           context,
-          title: 'مقارنة سنوية مع ${_selectedYear - 1}'
-              '${_selectedYear == currentYear ? ' (نفس المدة)' : ''}',
+          title: _selectedYear == currentYear
+              ? 'مقارنة مع سنة ${_selectedYear - 1} لحد نفس اليوم'
+              : 'مقارنة مع سنة ${_selectedYear - 1}',
           comparison: RevenueReportCalculator.compare(
             annualTotal,
             previousYearTotal,
@@ -275,7 +263,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         ),
         const SizedBox(height: 10),
         RevenueComparisonChart(
-          title: 'مقارنة الإيرادات شهر بشهر',
+          title: 'الإيرادات شهر بشهر',
           currentLabel: '$_selectedYear',
           previousLabel: '${_selectedYear - 1}',
           items: [
@@ -295,8 +283,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 4),
         Text(
           _selectedYear == currentYear
-              ? 'الشهر الحالي محسوب حتى اليوم، والشهور القادمة لا تدخل في الإجمالي.'
-              : 'كل شهر محسوب بالكامل حسب تاريخ التحصيل.',
+              ? 'الشهر الحالي محسوب لحد النهارده، والشهور اللي جاية مش داخلة في الحساب.'
+              : 'كل شهر محسوب بالكامل حسب الفلوس اللي اتحصلت فيه.',
           style: TextStyle(
             color: context.appPalette.textMuted,
             fontSize: 11,
@@ -326,7 +314,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'أنت غير متصل بالإنترنت. التقرير يعرض آخر بيانات محفوظة على الجهاز.',
+              'مفيش إنترنت دلوقتي. دي آخر بيانات محفوظة على الجهاز.',
               style: TextStyle(
                 color: context.appPalette.warning,
                 fontSize: 12,
@@ -338,7 +326,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             padding: const EdgeInsets.only(top: 12),
             child: Text(
               data.syncErrorMessage ??
-                  'تعذر تحديث البيانات. الأرقام المعروضة قد لا تشمل آخر التغييرات.',
+                  'مش قادرين نحدّث البيانات دلوقتي. الأرقام ممكن ما تكونش فيها آخر التغييرات.',
               style: TextStyle(
                 color: context.appPalette.error,
                 fontSize: 12,
@@ -425,8 +413,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             : Icons.trending_flat_rounded;
     final changeText = comparison.percentageChange == null
         ? comparison.current.revenue > 0
-            ? 'إيراد جديد؛ لا توجد قيمة سابقة لحساب النسبة'
-            : 'لا توجد إيرادات في الفترتين'
+            ? 'إيراد جديد، مفيش رقم قديم نقارن بيه'
+            : 'مفيش إيرادات في الفترتين'
         : '${comparison.percentageChange! > 0 ? '+' : ''}'
             '${comparison.percentageChange!.toStringAsFixed(1)}%';
 
@@ -471,7 +459,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             ),
             const SizedBox(height: 5),
             Text(
-              'الحالي: ${RtlSupport.formatEgp(comparison.current.revenue)}  •  السابق: '
+              'دلوقتي: ${RtlSupport.formatEgp(comparison.current.revenue)}  •  قبل كده: '
                   '${RtlSupport.formatEgp(comparison.previous.revenue)}',
               style: TextStyle(
                 color: context.appPalette.textMuted,
