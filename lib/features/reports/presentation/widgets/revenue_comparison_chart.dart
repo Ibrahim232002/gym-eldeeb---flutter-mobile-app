@@ -1,19 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import 'revenue_comparison_bar_item.dart';
 import 'revenue_chart_painter.dart';
 
-class RevenueComparisonBarItem {
-  final String label;
-  final double current;
-  final double previous;
-
-  const RevenueComparisonBarItem({
-    required this.label,
-    required this.current,
-    required this.previous,
-  });
-}
+export 'revenue_comparison_bar_item.dart';
 
 /// Shows a two-column comparison for one month, or two trend lines for a year.
 class RevenueComparisonChart extends StatelessWidget {
