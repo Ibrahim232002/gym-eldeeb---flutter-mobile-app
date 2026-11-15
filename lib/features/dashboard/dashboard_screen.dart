@@ -369,6 +369,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   void _handleBackPressed() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold?.isDrawerOpen ?? false) {
+      scaffold!.closeDrawer();
+      return;
+    }
+
     final currentTab = ref.read(selectedTabProvider);
     if (currentTab != 0) {
       ref.read(selectedTabProvider.notifier).state = 0;
