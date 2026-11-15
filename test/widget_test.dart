@@ -1936,6 +1936,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('system back returns to home before asking to exit',
+      (tester) async {
+    await tester.pumpWidget(
+      _buildDashboardTestApp(selectedTab: 8),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('تقارير الإيرادات'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('لوحة إحصائيات جيم الديب'), findsOneWidget);
+    expect(find.text('عايز تخرج؟'), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('عايز تخرج؟'), findsOneWidget);
+    await tester.tap(find.text('لأ، خليك'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('عايز تخرج؟'), findsNothing);
+    expect(find.text('لوحة إحصائيات جيم الديب'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('revenue reports tab opens and renders without payment history',
       (tester) async {
     await tester.pumpWidget(
