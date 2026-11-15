@@ -34,7 +34,7 @@ bool memberPhotoPathBelongsToMember({
   if (!fileName.startsWith(versionedPrefix)) return false;
 
   final version = fileName.substring(versionedPrefix.length);
-  return RegExp(r'^[0-9a-fA-F-]{36}\\.(jpg|jpeg)$')
+  return RegExp(r'^[0-9a-fA-F-]{36}\.(jpg|jpeg)$')
       .hasMatch(version);
 }
 
