@@ -310,73 +310,73 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         if (!didPop) _handleBackPressed();
       },
       child: Scaffold(
-      key: _scaffoldKey,
-      drawer: drawerWidget,
-      appBar: AppBar(
-        title: Text(_getTabTitle(currentTab)),
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        ),
-        actions: [
-          if (isOffline)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: Row(
-                children: [
-                  Icon(Icons.wifi_off_rounded,
-                      color: context.appPalette.error, size: 18),
-                  const SizedBox(width: 4),
-                  Text('من غير إنترنت',
-                      style: TextStyle(
-                          color: context.appPalette.error,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-          IconButton(
-            icon: syncStatus == SyncStatus.syncing
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation(context.appPalette.primary)),
-                  )
-                : const Icon(Icons.sync_rounded),
-            tooltip: 'تحديث البيانات',
-            onPressed: syncStatus == SyncStatus.syncing
-                ? null
-                : () => syncService.syncAll(forceRetry: true),
+        key: _scaffoldKey,
+        drawer: drawerWidget,
+        appBar: AppBar(
+          title: Text(_getTabTitle(currentTab)),
+          leading: IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-        ],
-      ),
-      body: Directionality(
-        textDirection: ui.TextDirection.rtl,
-        child: _buildBody(currentTab),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentTab > 3 ? 0 : currentTab,
-        onTap: (index) {
-          ref.read(selectedTabProvider.notifier).state = index;
-        },
-        backgroundColor: context.appPalette.surface,
-        selectedItemColor: context.appPalette.primary,
-        unselectedItemColor: context.appPalette.textMuted,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.people_alt_rounded), label: 'الأعضاء'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.card_membership_rounded), label: 'الخطط'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.sports_gymnastics_rounded), label: 'الاشتراكات'),
-        ],
-      ),
+          actions: [
+            if (isOffline)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.wifi_off_rounded,
+                        color: context.appPalette.error, size: 18),
+                    const SizedBox(width: 4),
+                    Text('من غير إنترنت',
+                        style: TextStyle(
+                            color: context.appPalette.error,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            IconButton(
+              icon: syncStatus == SyncStatus.syncing
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation(context.appPalette.primary)),
+                    )
+                  : const Icon(Icons.sync_rounded),
+              tooltip: 'تحديث البيانات',
+              onPressed: syncStatus == SyncStatus.syncing
+                  ? null
+                  : () => syncService.syncAll(forceRetry: true),
+            ),
+          ],
+        ),
+        body: Directionality(
+          textDirection: ui.TextDirection.rtl,
+          child: _buildBody(currentTab),
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: currentTab > 3 ? 0 : currentTab,
+          onTap: (index) {
+            ref.read(selectedTabProvider.notifier).state = index;
+          },
+          backgroundColor: context.appPalette.surface,
+          selectedItemColor: context.appPalette.primary,
+          unselectedItemColor: context.appPalette.textMuted,
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_rounded), label: 'الرئيسية'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.people_alt_rounded), label: 'الأعضاء'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.card_membership_rounded), label: 'الخطط'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.sports_gymnastics_rounded), label: 'الاشتراكات'),
+          ],
+        ),
       ),
     );
   }
