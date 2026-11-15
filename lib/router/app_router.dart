@@ -27,7 +27,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       switch (authState.status) {
         case AuthStatus.initial:
         case AuthStatus.loading:
-          // Remain on splash or wait for resolution
+          // Wait for the saved session check to finish.
           return null;
 
         case AuthStatus.unauthenticated:
