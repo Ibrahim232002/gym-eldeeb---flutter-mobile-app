@@ -115,7 +115,7 @@ class RevenueChartPainter extends CustomPainter {
     ];
     final values = [items.first.current, items.first.previous];
     final colors = [currentColor, previousColor];
-    const labels = ['الشهر المختار', 'الشهر اللي فات'];
+    const labels = ['الشهر المختار', 'فترة المقارنة'];
 
     for (var index = 0; index < 2; index++) {
       final value = values[index];
