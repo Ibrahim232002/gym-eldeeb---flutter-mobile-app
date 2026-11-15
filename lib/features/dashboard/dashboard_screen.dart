@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -193,12 +194,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final Set<int> _visitedTabs = <int>{0};
+  final List<int> _tabBackStack = <int>[];
+  bool _skipNextTabHistoryUpdate = false;
 
   @override
   Widget build(BuildContext context) {
     final currentTab = ref.watch(selectedTabProvider);
     // Keep navigation state in sync even when a tab is selected from a dashboard card.
     ref.listen<int>(selectedTabProvider, (previous, next) {
+      if (previous != null && previous != next) {
+        if (_skipNextTabHistoryUpdate) {
+          _skipNextTabHistoryUpdate = false;
+        } else {
+          _tabBackStack.add(previous);
+          if (_tabBackStack.length > 20) {
+            _tabBackStack.removeAt(0);
+          }
+        }
+      }
       if (!_visitedTabs.contains(next)) {
         setState(() => _visitedTabs.add(next));
       }
@@ -291,7 +304,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       ),
     );
 
-    return Scaffold(
+    return PopScope<Object?>(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleBackPressed();
+      },
+      child: Scaffold(
       key: _scaffoldKey,
       drawer: drawerWidget,
       appBar: AppBar(
@@ -359,7 +377,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               icon: Icon(Icons.sports_gymnastics_rounded), label: 'الاشتراكات'),
         ],
       ),
+      ),
     );
+  }
+
+  void _handleBackPressed() {
+    if (_tabBackStack.isNotEmpty) {
+      final previousTab = _tabBackStack.removeLast();
+      _skipNextTabHistoryUpdate = true;
+      ref.read(selectedTabProvider.notifier).state = previousTab;
+      return;
+    }
+    _confirmExit();
+  }
+
+  Future<void> _confirmExit() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: ui.TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: context.appPalette.surfaceCard,
+          title: const Text('عايز تخرج؟'),
+          content: const Text('متأكد إنك عايز تقفل التطبيق؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('لأ، خليك'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('أيوه، اخرج'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (shouldExit == true) {
+      await SystemNavigator.pop();
+    }
   }
 
   Widget _buildDrawerItem(
