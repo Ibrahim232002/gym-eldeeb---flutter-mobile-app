@@ -194,24 +194,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final Set<int> _visitedTabs = <int>{0};
-  final List<int> _tabBackStack = <int>[];
-  bool _skipNextTabHistoryUpdate = false;
 
   @override
   Widget build(BuildContext context) {
     final currentTab = ref.watch(selectedTabProvider);
     // Keep navigation state in sync even when a tab is selected from a dashboard card.
     ref.listen<int>(selectedTabProvider, (previous, next) {
-      if (previous != null && previous != next) {
-        if (_skipNextTabHistoryUpdate) {
-          _skipNextTabHistoryUpdate = false;
-        } else {
-          _tabBackStack.add(previous);
-          if (_tabBackStack.length > 20) {
-            _tabBackStack.removeAt(0);
-          }
-        }
-      }
       if (!_visitedTabs.contains(next)) {
         setState(() => _visitedTabs.add(next));
       }
@@ -305,7 +293,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
 
     return PopScope<Object?>(
-      canPop: Navigator.of(context).canPop(),
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _handleBackPressed();
       },
@@ -382,10 +370,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   void _handleBackPressed() {
-    if (_tabBackStack.isNotEmpty) {
-      final previousTab = _tabBackStack.removeLast();
-      _skipNextTabHistoryUpdate = true;
-      ref.read(selectedTabProvider.notifier).state = previousTab;
+    final currentTab = ref.read(selectedTabProvider);
+    if (currentTab != 0) {
+      ref.read(selectedTabProvider.notifier).state = 0;
       return;
     }
     _confirmExit();
