@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../core/services/data_sync_service.dart';
 import '../../../core/utils/gym_clock.dart';
 import '../../../core/utils/rtl_support.dart';
