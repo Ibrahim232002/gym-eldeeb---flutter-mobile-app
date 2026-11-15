@@ -747,6 +747,7 @@ class _DashboardOverviewTab extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(12)),
                   leading: MemberPhotoAvatar(
                     gymId: member.gymId,
+                    memberId: member.id,
                     fullName: member.fullName,
                     photoPath: member.photoPath,
                     radius: 22,
@@ -1092,6 +1093,7 @@ class _MembersTabState extends ConsumerState<_MembersTab> {
                       child: ListTile(
                         leading: MemberPhotoAvatar(
                           gymId: member.gymId,
+                          memberId: member.id,
                           fullName: member.fullName,
                           photoPath: member.photoPath,
                           radius: 22,
@@ -1722,6 +1724,7 @@ class _EditMemberDialogState extends ConsumerState<_EditMemberDialog> {
               children: [
                 MemberPhotoInput(
                   gymId: widget.member.gymId,
+                  memberId: widget.member.id,
                   fullName: _nameController.text,
                   existingPhotoPath:
                       _removePhoto ? null : widget.member.photoPath,
@@ -1865,6 +1868,7 @@ class _MemberDetailsBottomSheet extends ConsumerWidget {
                     children: [
                       MemberPhotoAvatar(
                         gymId: member.gymId,
+                        memberId: member.id,
                         fullName: member.fullName,
                         photoPath: member.photoPath,
                         radius: 22,
