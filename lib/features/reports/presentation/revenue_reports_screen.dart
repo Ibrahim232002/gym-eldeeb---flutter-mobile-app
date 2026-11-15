@@ -80,7 +80,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       throughDay: monthThroughDay,
     );
 
-        final isComparisonCurrentMonth =
+    final isComparisonCurrentMonth =
         _comparisonYear == currentYear && _comparisonMonth == currentMonth;
     final comparisonTotal = RevenueReportCalculator.forMonth(
       payments,
