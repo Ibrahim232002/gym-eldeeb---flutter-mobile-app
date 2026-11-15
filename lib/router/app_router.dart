@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
-import '../features/splash/splash_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/gym/join_gym_screen.dart';
@@ -22,9 +21,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authNotifierProvider);
       final location = state.uri.path;
 
-      // Allow splash to perform initialization
-      if (location == '/') return null;
-
+      final isEntry = location == '/';
       final isLoggingIn = location == '/login' || location == '/register';
 
       switch (authState.status) {
@@ -45,7 +42,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
         case AuthStatus.authenticatedWithGym:
           // Fully authenticated with gym association
-          if (isLoggingIn || location == '/join-gym') {
+          if (isEntry || isLoggingIn || location == '/join-gym') {
             return '/dashboard';
           }
           return null;
@@ -54,7 +51,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const SplashScreen(),
+        builder: (context, state) => Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: const SizedBox.expand(),
+        ),
       ),
       GoRoute(
         path: '/login',
