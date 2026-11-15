@@ -1993,6 +1993,16 @@ void main() {
       find.text('مقارنة مع يناير ${initialComparisonDate.year}'),
       findsOneWidget,
     );
+
+    final comparisonYearKey = ValueKey<String>(
+      'comparison-year-${initialComparisonDate.year}',
+    );
+    await tester.tap(find.byKey(comparisonYearKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('${today.year - 2}').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('مقارنة مع يناير ${today.year - 2}'), findsOneWidget);
     final annualComparison = find.text(
       'مقارنة مع سنة ${GymClock.today().year - 1} لحد نفس اليوم',
     );
