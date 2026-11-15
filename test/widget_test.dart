@@ -21,6 +21,7 @@ import 'package:gym_eldeeb/core/theme/app_theme.dart';
 import 'package:gym_eldeeb/core/utils/member_identity.dart';
 import 'package:gym_eldeeb/core/utils/gym_clock.dart';
 import 'package:gym_eldeeb/features/dashboard/dashboard_screen.dart';
+import 'package:gym_eldeeb/features/reports/presentation/widgets/revenue_comparison_chart.dart';
 import 'package:gym_eldeeb/features/auth/login_screen.dart';
 import 'package:gym_eldeeb/widgets/member_photo.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -1974,7 +1975,24 @@ void main() {
       find.text('هنا هتلاقي الفلوس اللي اتحصلت فعلًا من الجيم.'),
       findsOneWidget,
     );
-    expect(find.byType(DropdownButtonFormField<int>), findsNWidgets(2));
+    expect(find.byType(DropdownButtonFormField<int>), findsNWidgets(4));
+    expect(find.text('سنة المقارنة'), findsOneWidget);
+    expect(find.text('شهر المقارنة'), findsOneWidget);
+
+    final today = GymClock.today();
+    final initialComparisonDate = DateTime(today.year, today.month - 1, 1);
+    final comparisonMonthKey = ValueKey<String>(
+      'comparison-month-${initialComparisonDate.year}-${initialComparisonDate.month}',
+    );
+    await tester.tap(find.byKey(comparisonMonthKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('يناير').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('مقارنة مع يناير ${initialComparisonDate.year}'),
+      findsOneWidget,
+    );
     final annualComparison = find.text(
       'مقارنة مع سنة ${GymClock.today().year - 1} لحد نفس اليوم',
     );
@@ -1985,17 +2003,24 @@ void main() {
     );
     expect(annualComparison, findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('دخل الشهر ده والشهر اللي فات'),
+      find.text('مقارنة بين الشهرين'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('دخل الشهر ده والشهر اللي فات'), findsOneWidget);
+    expect(find.text('مقارنة بين الشهرين'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('الإيرادات شهر بشهر'),
       280,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('الإيرادات شهر بشهر'), findsOneWidget);
+    final annualChartFinder = find.ancestor(
+      of: find.text('الإيرادات شهر بشهر'),
+      matching: find.byType(RevenueComparisonChart),
+    );
+    final annualChart =
+        tester.widget<RevenueComparisonChart>(annualChartFinder);
+    expect(annualChart.items.length, GymClock.today().month);
     expect(tester.takeException(), isNull);
   });
 
