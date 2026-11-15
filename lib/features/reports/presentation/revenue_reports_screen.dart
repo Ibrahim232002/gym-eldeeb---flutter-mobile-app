@@ -210,7 +210,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 16),
         _comparisonCard(
           context,
-          title: 'مقارنة بالشهر السابق '
+          title: 'مقارنة بالشهر اللي فات '
               '(${_monthName(previousMonthDate.month)} ${previousMonthDate.year})',
           comparison: RevenueReportCalculator.compare(
             monthTotal,
@@ -220,7 +220,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 10),
         _comparisonCard(
           context,
-          title: 'مقارنة بنفس الشهر في سنة ${_selectedYear - 1}',
+          title: 'مقارنة بنفس الشهر من سنة ${_selectedYear - 1}',
           comparison: RevenueReportCalculator.compare(
             monthTotal,
             sameMonthLastYear,
@@ -234,7 +234,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
               '${previousMonthDate.year}',
           items: [
             RevenueComparisonBarItem(
-              label: 'إجمالي الإيراد المحصّل',
+              label: 'إجمالي الدخل',
               current: monthTotal.revenue,
               previous: previousMonthTotal.revenue,
             ),
@@ -277,7 +277,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         ),
         const SizedBox(height: 22),
         Text(
-          'تفصيل إيرادات شهور سنة $_selectedYear',
+          'تفاصيل دخل شهور سنة $_selectedYear',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
