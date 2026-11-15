@@ -1937,7 +1937,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('system back returns to home before asking to exit',
+  testWidgets('system back closes drawer before navigating or exiting',
       (tester) async {
     await tester.pumpWidget(
       _buildDashboardTestApp(selectedTab: 8),
@@ -1945,6 +1945,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('تقارير الإيرادات'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('إدارة الأعضاء'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('إدارة الأعضاء'), findsNothing);
+    expect(find.text('تقارير الإيرادات'), findsOneWidget);
+    expect(find.text('عايز تخرج؟'), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -1981,6 +1992,22 @@ void main() {
 
     final today = GymClock.today();
     final initialComparisonDate = DateTime(today.year, today.month - 1, 1);
+    final reportMonthWidget = find.byKey(
+      ValueKey<String>('report-month-${today.year}-${today.month}'),
+    );
+    final reportDropdown = tester.widget<DropdownButton<int>>(
+      find.descendant(
+        of: reportMonthWidget,
+        matching: find.byType(DropdownButton<int>),
+      ),
+    );
+    final availableReportMonths =
+        reportDropdown.items!.map((item) => item.value).toList();
+    expect(availableReportMonths, contains(today.month));
+    expect(availableReportMonths, isNot(contains(initialComparisonDate.month)));
+    if (today.month < 12) {
+      expect(availableReportMonths, isNot(contains(today.month + 1)));
+    }
     final comparisonMonthWidget = find.byKey(
       ValueKey<String>(
         'comparison-month-${initialComparisonDate.year}-${initialComparisonDate.month}',
@@ -2015,6 +2042,33 @@ void main() {
       find.text('مقارنة مع يناير ${initialComparisonDate.year}'),
       findsOneWidget,
     );
+
+    if (today.month > 1) {
+      final sameYearComparisonField =
+          tester.widget<DropdownButtonFormField<int>>(
+        find.byKey(
+          ValueKey<String>(
+            'comparison-year-${initialComparisonDate.year}',
+          ),
+        ),
+      );
+      sameYearComparisonField.onChanged!(today.year);
+      await tester.pumpAndSettle();
+
+      final refreshedReportMonth = find.byKey(
+        ValueKey<String>('report-month-${today.year}-${today.month}'),
+      );
+      final refreshedReportDropdown = tester.widget<DropdownButton<int>>(
+        find.descendant(
+          of: refreshedReportMonth,
+          matching: find.byType(DropdownButton<int>),
+        ),
+      );
+      final refreshedReportMonths =
+          refreshedReportDropdown.items!.map((item) => item.value).toList();
+      expect(refreshedReportMonths, isNot(contains(1)));
+      expect(refreshedReportMonths, contains(today.month));
+    }
 
     final comparisonYearField =
         tester.widget<DropdownButtonFormField<int>>(
