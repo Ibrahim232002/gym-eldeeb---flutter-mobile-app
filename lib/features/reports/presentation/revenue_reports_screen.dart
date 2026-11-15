@@ -395,7 +395,10 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
                     total: annualMonths[month] ?? const RevenueTotals(),
                     maxRevenue: maxMonthRevenue,
                     isSelected: month == _selectedMonth,
-                    onTap: () => setState(() => _selectedMonth = month),
+                    onTap: () => setState(() {
+                      _selectedMonth = month;
+                      _keepComparisonDifferentFromSelectedPeriod();
+                    }),
                   ),
               ],
             ),
