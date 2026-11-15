@@ -1944,12 +1944,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(
-      find.text('تابع الإيرادات المحصّلة حسب تاريخ استلام الدفع'),
+      find.text('هنا هتلاقي الفلوس اللي اتحصلت فعلًا من الجيم.'),
       findsOneWidget,
     );
     expect(find.byType(DropdownButtonFormField<int>), findsNWidgets(2));
     final annualComparison = find.text(
-      'مقارنة سنوية مع ${GymClock.today().year - 1} (نفس المدة)',
+      'مقارنة مع سنة ${GymClock.today().year - 1} لحد نفس اليوم',
     );
     await tester.scrollUntilVisible(
       annualComparison,
@@ -1958,11 +1958,11 @@ void main() {
     );
     expect(annualComparison, findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('الرسم البياني لمقارنة الشهر'),
+      find.text('دخل الشهر ده والشهر اللي فات'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('الرسم البياني لمقارنة الشهر'), findsOneWidget);
+    expect(find.text('دخل الشهر ده والشهر اللي فات'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('مقارنة الإيرادات شهر بشهر'),
       280,
