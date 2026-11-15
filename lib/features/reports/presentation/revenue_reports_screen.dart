@@ -19,13 +19,27 @@ class RevenueReportsScreen extends ConsumerStatefulWidget {
 class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
   late int _selectedYear;
   late int _selectedMonth;
+  late int _comparisonYear;
+  late int _comparisonMonth;
 
   @override
   void initState() {
     super.initState();
     final today = GymClock.today();
+    final defaultComparison = DateTime(today.year, today.month - 1, 1);
     _selectedYear = today.year;
     _selectedMonth = today.month;
+    _comparisonYear = defaultComparison.year;
+    _comparisonMonth = defaultComparison.month;
+  }
+
+  void _keepComparisonDifferentFromSelectedPeriod() {
+    if (_comparisonYear == _selectedYear &&
+        _comparisonMonth == _selectedMonth) {
+      final fallback = DateTime(_selectedYear, _selectedMonth - 1, 1);
+      _comparisonYear = fallback.year;
+      _comparisonMonth = fallback.month;
+    }
   }
 
   @override
@@ -66,14 +80,15 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       throughDay: monthThroughDay,
     );
 
-    final previousMonthDate = DateTime(_selectedYear, _selectedMonth - 1, 1);
-    // Compare the partial current month with the entire previous month.
-    // The same month from last year is also counted in full.
-    final previousMonthTotal = RevenueReportCalculator.forMonth(
+    final comparisonDate = DateTime(_comparisonYear, _comparisonMonth, 1);
+    final isComparisonCurrentMonth =
+        _comparisonYear == currentYear && _comparisonMonth == currentMonth;
+    final comparisonTotal = RevenueReportCalculator.forMonth(
       payments,
       gymId: gymId,
-      year: previousMonthDate.year,
-      month: previousMonthDate.month,
+      year: _comparisonYear,
+      month: _comparisonMonth,
+      throughDay: isComparisonCurrentMonth ? currentDay : null,
     );
 
     final sameMonthLastYear = RevenueReportCalculator.forMonth(
@@ -119,6 +134,8 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       throughMonth: annualThroughMonth,
       throughDay: annualThroughDay,
     );
+    // A current-year trend ends at the current month. Future months are not zero.
+    final visibleAnnualMonthCount = annualThroughMonth ?? 12;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -135,7 +152,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           children: [
             Expanded(
               child: DropdownButtonFormField<int>(
-                key: ValueKey<int>(_selectedYear),
+                key: const ValueKey<String>('report-year'),
                 initialValue: _selectedYear,
                 isExpanded: true,
                 decoration: const InputDecoration(
@@ -156,6 +173,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
                     _selectedYear = year;
                     _selectedMonth =
                         year == currentYear ? currentMonth : 12;
+                    _keepComparisonDifferentFromSelectedPeriod();
                   });
                 },
               ),
@@ -163,7 +181,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: DropdownButtonFormField<int>(
-                key: ValueKey<String>('$_selectedYear-$_selectedMonth'),
+                key: const ValueKey<String>('report-month'),
                 initialValue: _selectedMonth,
                 isExpanded: true,
                 decoration: const InputDecoration(
@@ -179,8 +197,81 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
                 ],
                 onChanged: (month) {
                   if (month != null) {
-                    setState(() => _selectedMonth = month);
+                    setState(() {
+                      _selectedMonth = month;
+                      _keepComparisonDifferentFromSelectedPeriod();
+                    });
                   }
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'قارن الشهر ده مع فترة تانية',
+          style: TextStyle(
+            color: context.appPalette.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                key: ValueKey<String>('comparison-year-$_comparisonYear'),
+                initialValue: _comparisonYear,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'سنة المقارنة',
+                  prefixIcon: Icon(Icons.calendar_today_rounded),
+                ),
+                items: years
+                    .map(
+                      (year) => DropdownMenuItem<int>(
+                        value: year,
+                        child: Text('$year'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (year) {
+                  if (year == null) return;
+                  setState(() {
+                    _comparisonYear = year;
+                    _keepComparisonDifferentFromSelectedPeriod();
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                key: ValueKey<String>(
+                  'comparison-month-$_comparisonYear-$_comparisonMonth',
+                ),
+                initialValue: _comparisonMonth,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'شهر المقارنة',
+                  prefixIcon: Icon(Icons.date_range_rounded),
+                ),
+                items: [
+                  for (var month = 1; month <= 12; month++)
+                    DropdownMenuItem<int>(
+                      value: month,
+                      enabled: _comparisonYear != _selectedYear ||
+                          month != _selectedMonth,
+                      child: Text(_monthName(month)),
+                    ),
+                ],
+                onChanged: (month) {
+                  if (month == null) return;
+                  setState(() {
+                    _comparisonMonth = month;
+                    _keepComparisonDifferentFromSelectedPeriod();
+                  });
                 },
               ),
             ),
@@ -196,11 +287,13 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
               '(${RtlSupport.formatEgp(monthTotal.cancelledAmount)}) مش داخلة في الحساب',
           icon: Icons.payments_rounded,
         ),
-        if (isCurrentMonth)
+        if (isCurrentMonth || isComparisonCurrentMonth)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'الأرقام لحد يوم $currentDay، وبنقارنها بالشهر اللي فات كامل.',
+              isCurrentMonth
+                  ? 'إيراد الشهر المختار محسوب لحد يوم $currentDay.'
+                  : 'فترة المقارنة محسوبة لحد يوم $currentDay لأنها الشهر الحالي.',
               style: TextStyle(
                 color: context.appPalette.textMuted,
                 fontSize: 11,
@@ -210,11 +303,10 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 16),
         _comparisonCard(
           context,
-          title: 'مقارنة بالشهر اللي فات '
-              '(${_monthName(previousMonthDate.month)} ${previousMonthDate.year})',
+          title: 'مقارنة مع ${_monthName(_comparisonMonth)} $_comparisonYear',
           comparison: RevenueReportCalculator.compare(
             monthTotal,
-            previousMonthTotal,
+            comparisonTotal,
           ),
         ),
         const SizedBox(height: 10),
@@ -228,15 +320,15 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         ),
         const SizedBox(height: 10),
         RevenueComparisonChart(
-          title: 'دخل الشهر ده والشهر اللي فات',
+          title: 'مقارنة بين الشهرين',
           currentLabel: '${_monthName(_selectedMonth)} $_selectedYear',
-          previousLabel: '${_monthName(previousMonthDate.month)} '
-              '${previousMonthDate.year}',
+          previousLabel: '${_monthName(_comparisonMonth)} '
+              '$_comparisonYear',
           items: [
             RevenueComparisonBarItem(
               label: 'إجمالي الدخل',
               current: monthTotal.revenue,
-              previous: previousMonthTotal.revenue,
+              previous: comparisonTotal.revenue,
             ),
           ],
         ),
@@ -267,7 +359,7 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           currentLabel: '$_selectedYear',
           previousLabel: '${_selectedYear - 1}',
           items: [
-            for (var month = 1; month <= 12; month++)
+            for (var month = 1; month <= visibleAnnualMonthCount; month++)
               RevenueComparisonBarItem(
                 label: _monthName(month),
                 current: annualMonths[month]?.revenue ?? 0,
