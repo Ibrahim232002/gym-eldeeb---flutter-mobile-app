@@ -1935,4 +1935,22 @@ void main() {
     expect(preferences.getString('gym_eldeeb_theme'), 'darkBlue');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('revenue reports tab opens and renders without payment history',
+      (tester) async {
+    await tester.pumpWidget(
+      _buildDashboardTestApp(selectedTab: 8),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(
+      find.text('تابع الإيرادات المحصّلة حسب تاريخ استلام الدفع'),
+      findsOneWidget,
+    );
+    expect(find.byType(DropdownButtonFormField<int>), findsNWidgets(2));
+    expect(find.text('مقارنة سنوية مع ' +
+        (GymClock.today().year - 1).toString()), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }
