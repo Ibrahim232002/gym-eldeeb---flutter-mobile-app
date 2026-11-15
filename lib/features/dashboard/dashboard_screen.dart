@@ -21,6 +21,7 @@ import '../../data/models/membership.dart';
 import '../../data/models/payment.dart';
 import '../../data/models/gym.dart';
 import '../../data/models/user_profile.dart';
+import '../../features/reports/presentation/revenue_reports_screen.dart';
 import '../../widgets/member_photo.dart';
 
 /// Navigation Tab state provider
@@ -268,6 +269,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     Icons.alarm_rounded, currentTab),
                 _buildDrawerItem(
                     4, 'سجل المدفوعات', Icons.payments_rounded, currentTab),
+                _buildDrawerItem(
+                    8, 'تقارير الإيرادات', Icons.analytics_rounded, currentTab),
                 _buildDrawerItem(6, 'الملف الشخصي والإعدادات',
                     Icons.settings_rounded, currentTab),
               ],
@@ -400,6 +403,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         return 'الإعدادات والملف الشخصي';
       case 7:
         return 'اشتراكات قاربت على الانتهاء';
+      case 8:
+        return 'تقارير الإيرادات';
       default:
         return 'جيم الديب';
     }
@@ -409,7 +414,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     // Build tabs on first visit, then keep them mounted so returning to a tab
     // preserves scroll position, search/filter state, and other local UI state.
     // Unvisited tabs stay as placeholders to avoid loading every screen up front.
-    const validTabs = <int>{0, 1, 2, 3, 4, 6, 7};
+    const validTabs = <int>{0, 1, 2, 3, 4, 6, 7, 8};
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -442,6 +447,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         return const _SettingsTab();
       case 7:
         return const _ExpiringMembershipsTab();
+      case 8:
+        return const RevenueReportsScreen();
       default:
         return const Center(child: Text('جيم الديب'));
     }
@@ -496,11 +503,12 @@ class _DashboardOverviewTab extends ConsumerWidget {
     final activeMembers = members.where((m) => m.isActive).length;
     final inactiveMembers = totalMembers - activeMembers;
 
-    final now = DateTime.now();
+    final now = GymClock.today();
     final expiringSoonMemberships = data.expiringMemberships;
 
     final monthPayments = payments
-        .where((payment) => payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .where((payment) => GymClock.inCairo(payment.paidAt).year == now.year &&
+            GymClock.inCairo(payment.paidAt).month == now.month)
         .toList()
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
     final monthRevenue =
@@ -3622,10 +3630,11 @@ class _PaymentsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(dataSyncServiceProvider);
-    final now = DateTime.now();
+    final now = GymClock.today();
     final monthLabel = _formatArabicMonth(now);
     final monthlyPayments = data.payments
-        .where((payment) => payment.paidAt.year == now.year && payment.paidAt.month == now.month)
+        .where((payment) => GymClock.inCairo(payment.paidAt).year == now.year &&
+            GymClock.inCairo(payment.paidAt).month == now.month)
         .toList()
       ..sort((a, b) => b.paidAt.compareTo(a.paidAt));
     final monthlyRevenue = monthlyPayments.where((payment) => !payment.isCancelled).fold<double>(0, (sum, payment) => sum + payment.amount);
@@ -3665,6 +3674,15 @@ class _PaymentsTab extends ConsumerWidget {
                       color: context.appPalette.success,
                       fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'التقارير المالية',
+                    icon: Icon(
+                      Icons.analytics_outlined,
+                      color: context.appPalette.primary,
+                    ),
+                    onPressed: () =>
+                        ref.read(selectedTabProvider.notifier).state = 8,
                   ),
                 ],
               ),
