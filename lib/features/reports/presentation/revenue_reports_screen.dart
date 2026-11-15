@@ -253,8 +253,10 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
                   for (var month = 1; month <= 12; month++)
                     DropdownMenuItem<int>(
                       value: month,
-                      enabled: _comparisonYear != _selectedYear ||
-                          month != _selectedMonth,
+                      enabled: (_comparisonYear != _selectedYear ||
+                              month != _selectedMonth) &&
+                          (_comparisonYear != currentYear ||
+                              month <= currentMonth),
                       child: Text(_monthName(month)),
                     ),
                 ],
