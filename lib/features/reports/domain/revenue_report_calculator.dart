@@ -90,13 +90,15 @@ class RevenueReportCalculator {
   }) {
     return {
       for (var month = 1; month <= 12; month++)
-        month: forMonth(
-          payments,
-          gymId: gymId,
-          year: year,
-          month: month,
-          throughDay: month == throughMonth ? throughDay : null,
-        ),
+        month: throughMonth != null && month > throughMonth
+            ? const RevenueTotals()
+            : forMonth(
+                payments,
+                gymId: gymId,
+                year: year,
+                month: month,
+                throughDay: month == throughMonth ? throughDay : null,
+              ),
     };
   }
 
