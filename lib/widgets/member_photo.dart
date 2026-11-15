@@ -30,9 +30,12 @@ bool memberPhotoPathBelongsToMember({
     return true;
   }
 
-  return RegExp(
-    '^\${RegExp.escape(memberId)}-[0-9a-fA-F-]{36}\\.(jpg|jpeg)$',
-  ).hasMatch(fileName);
+  final versionedPrefix = '$memberId-';
+  if (!fileName.startsWith(versionedPrefix)) return false;
+
+  final version = fileName.substring(versionedPrefix.length);
+  return RegExp(r'^[0-9a-fA-F-]{36}\\.(jpg|jpeg)$')
+      .hasMatch(version);
 }
 
 class _SignedPhotoUrlEntry {
