@@ -2004,7 +2004,11 @@ void main() {
     final availableReportMonths =
         reportDropdown.items!.map((item) => item.value).toList();
     expect(availableReportMonths, contains(today.month));
-    expect(availableReportMonths, isNot(contains(initialComparisonDate.month)));
+    if (initialComparisonDate.year == today.year) {
+      expect(availableReportMonths, isNot(contains(initialComparisonDate.month)));
+    } else {
+      expect(availableReportMonths, contains(initialComparisonDate.month));
+    }
     if (today.month < 12) {
       expect(availableReportMonths, isNot(contains(today.month + 1)));
     }
