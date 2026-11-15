@@ -11,7 +11,29 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/constants/supabase_constants.dart';
 import '../core/theme/app_colors.dart';
 
-String _memberPhotoCacheKey(String gymId, String path) => 'gym:$gymId:member-photo:$path';
+String _memberPhotoCacheKey(String gymId, String memberId, String path) =>
+    'gym:$gymId:member:$memberId:photo:$path';
+
+/// Accepts legacy memberId.jpg paths and current memberId-uuid.jpg paths.
+bool memberPhotoPathBelongsToMember({
+  required String gymId,
+  required String memberId,
+  required String path,
+}) {
+  if (gymId.isEmpty || memberId.isEmpty) return false;
+
+  final gymPrefix = '$gymId/';
+  if (!path.startsWith(gymPrefix)) return false;
+
+  final fileName = path.substring(gymPrefix.length);
+  if (fileName == '$memberId.jpg' || fileName == '$memberId.jpeg') {
+    return true;
+  }
+
+  return RegExp(
+    '^\${RegExp.escape(memberId)}-[0-9a-fA-F-]{36}\\.(jpg|jpeg)$',
+  ).hasMatch(fileName);
+}
 
 class _SignedPhotoUrlEntry {
   final Future<String> future;
@@ -21,8 +43,12 @@ class _SignedPhotoUrlEntry {
 
 final Map<String, _SignedPhotoUrlEntry> _signedPhotoUrlCache = {};
 
-Future<String> _cachedMemberPhotoUrl(String gymId, String path) {
-  final key = '$gymId/$path';
+Future<String> _cachedMemberPhotoUrl(
+  String gymId,
+  String memberId,
+  String path,
+) {
+  final key = '$gymId/$memberId/$path';
   final now = DateTime.now();
   final cached = _signedPhotoUrlCache[key];
   if (cached != null && cached.expiresAt.isAfter(now)) return cached.future;
@@ -68,6 +94,7 @@ Future<Uint8List> compressMemberPhoto(Uint8List sourceBytes) async {
 
 class MemberPhotoAvatar extends StatefulWidget {
   final String gymId;
+  final String memberId;
   final String fullName;
   final String? photoPath;
   final Uint8List? photoBytes;
@@ -76,6 +103,7 @@ class MemberPhotoAvatar extends StatefulWidget {
   const MemberPhotoAvatar({
     super.key,
     required this.gymId,
+    required this.memberId,
     required this.fullName,
     this.photoPath,
     this.photoBytes,
@@ -100,6 +128,7 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.photoPath != widget.photoPath ||
         oldWidget.gymId != widget.gymId ||
+        oldWidget.memberId != widget.memberId ||
         oldWidget.photoBytes != widget.photoBytes) {
       _loadSignedUrl();
     }
@@ -111,13 +140,21 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
       _signedUrl = null;
       return;
     }
-    if (!path.startsWith('${widget.gymId}/')) {
+    if (!memberPhotoPathBelongsToMember(
+      gymId: widget.gymId,
+      memberId: widget.memberId,
+      path: path,
+    )) {
       _signedUrl = Future<String>.error(
-        StateError('مسار الصورة لا يتبع صالة العضو.'),
+        StateError('مسار الصورة لا يخص العضو الحالي.'),
       );
       return;
     }
-    _signedUrl = _cachedMemberPhotoUrl(widget.gymId, path);
+    _signedUrl = _cachedMemberPhotoUrl(
+      widget.gymId,
+      widget.memberId,
+      path,
+    );
   }
 
   Widget _fallback(BuildContext context, {double? radius}) {
@@ -143,14 +180,24 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
     final image = widget.photoBytes != null
         ? Image.memory(
             widget.photoBytes!,
+            key: ValueKey<int>(identityHashCode(widget.photoBytes!)),
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => _fallback(context, radius: radius),
           )
         : url == null
             ? _fallback(context, radius: radius)
             : CachedNetworkImage(
+                key: ValueKey<String>(_memberPhotoCacheKey(
+                  widget.gymId,
+                  widget.memberId,
+                  widget.photoPath!,
+                )),
                 imageUrl: url,
-                cacheKey: _memberPhotoCacheKey(widget.gymId, widget.photoPath!),
+                cacheKey: _memberPhotoCacheKey(
+                  widget.gymId,
+                  widget.memberId,
+                  widget.photoPath!,
+                ),
                 fit: BoxFit.cover,
                 memCacheWidth: 256,
                 memCacheHeight: 256,
@@ -316,7 +363,11 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
                         }
                         return _previewImage(CachedNetworkImageProvider(
                           snapshot.data!,
-                          cacheKey: _memberPhotoCacheKey(widget.gymId, widget.photoPath!),
+                          cacheKey: _memberPhotoCacheKey(
+                            widget.gymId,
+                            widget.memberId,
+                            widget.photoPath!,
+                          ),
                         ));
                       },
                     ),
@@ -336,8 +387,17 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
         child: widget.photoBytes != null || signedUrl == null
             ? _photo(context, null)
             : FutureBuilder<String>(
+                key: ValueKey<String>(
+                  '${widget.gymId}/${widget.memberId}/${widget.photoPath}',
+                ),
                 future: signedUrl,
-                builder: (context, snapshot) => _photo(context, snapshot.data),
+                builder: (context, snapshot) {
+                  final url = snapshot.connectionState == ConnectionState.done &&
+                          snapshot.hasData
+                      ? snapshot.data
+                      : null;
+                  return _photo(context, url);
+                },
               ),
       ),
     );
@@ -346,6 +406,7 @@ class _MemberPhotoAvatarState extends State<MemberPhotoAvatar> {
 
 class MemberPhotoInput extends StatefulWidget {
   final String gymId;
+  final String? memberId;
   final String fullName;
   final String? existingPhotoPath;
   final Uint8List? selectedPhotoBytes;
@@ -355,6 +416,7 @@ class MemberPhotoInput extends StatefulWidget {
   const MemberPhotoInput({
     super.key,
     required this.gymId,
+    this.memberId,
     required this.fullName,
     required this.existingPhotoPath,
     required this.selectedPhotoBytes,
@@ -404,6 +466,7 @@ class _MemberPhotoInputState extends State<MemberPhotoInput> {
       children: [
         MemberPhotoAvatar(
           gymId: widget.gymId,
+          memberId: widget.memberId ?? '',
           fullName: widget.fullName,
           photoPath: widget.existingPhotoPath,
           photoBytes: widget.selectedPhotoBytes,
