@@ -6,6 +6,7 @@ import '../../../core/services/data_sync_service.dart';
 import '../../../core/utils/gym_clock.dart';
 import '../../../core/utils/rtl_support.dart';
 import '../domain/revenue_report_calculator.dart';
+import 'widgets/revenue_comparison_chart.dart';
 
 class RevenueReportsScreen extends ConsumerStatefulWidget {
   const RevenueReportsScreen({super.key});
@@ -123,6 +124,13 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
       (maximum, total) =>
           total.revenue > maximum ? total.revenue : maximum,
     );
+    final previousAnnualMonths = RevenueReportCalculator.monthlyTotals(
+      payments,
+      gymId: gymId,
+      year: _selectedYear - 1,
+      throughMonth: annualThroughMonth,
+      throughDay: annualThroughDay,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -239,6 +247,20 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             sameMonthLastYear,
           ),
         ),
+        const SizedBox(height: 10),
+        RevenueComparisonChart(
+          title: 'الرسم البياني لمقارنة الشهر',
+          currentLabel: _monthName(_selectedMonth) + ' $_selectedYear',
+          previousLabel: _monthName(previousMonthDate.month) +
+              ' ${previousMonthDate.year}',
+          items: [
+            RevenueComparisonBarItem(
+              label: 'إجمالي الإيراد المحصّل',
+              current: monthTotal.revenue,
+              previous: previousMonthTotal.revenue,
+            ),
+          ],
+        ),
         const SizedBox(height: 18),
         _summaryCard(
           context,
@@ -260,6 +282,20 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
             annualTotal,
             previousYearTotal,
           ),
+        ),
+        const SizedBox(height: 10),
+        RevenueComparisonChart(
+          title: 'مقارنة الإيرادات شهر بشهر',
+          currentLabel: '$_selectedYear',
+          previousLabel: '${_selectedYear - 1}',
+          items: [
+            for (var month = 1; month <= 12; month++)
+              RevenueComparisonBarItem(
+                label: _monthName(month),
+                current: annualMonths[month]?.revenue ?? 0,
+                previous: previousAnnualMonths[month]?.revenue ?? 0,
+              ),
+          ],
         ),
         const SizedBox(height: 22),
         Text(
