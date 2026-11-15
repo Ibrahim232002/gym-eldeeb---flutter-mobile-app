@@ -197,8 +197,10 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
           amount: monthTotal.revenue,
           details: monthTotal.paymentCount.toString() +
               ' دفعة محسوبة • ' +
+              monthTotal.cancelledCount.toString() +
+              ' دفعة ملغاة (' +
               RtlSupport.formatEgp(monthTotal.cancelledAmount) +
-              ' دفعات ملغاة مستبعدة',
+              ') مستبعدة',
           icon: Icons.payments_rounded,
         ),
         if (isCurrentMonth)
@@ -251,7 +253,9 @@ class _RevenueReportsScreenState extends ConsumerState<RevenueReportsScreen> {
         const SizedBox(height: 10),
         _comparisonCard(
           context,
-          title: 'مقارنة سنوية مع ' + (_selectedYear - 1).toString(),
+          title: 'مقارنة سنوية مع ' +
+              (_selectedYear - 1).toString() +
+              (_selectedYear == currentYear ? ' (نفس المدة)' : ''),
           comparison: RevenueReportCalculator.compare(
             annualTotal,
             previousYearTotal,
